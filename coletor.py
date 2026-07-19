@@ -26,6 +26,10 @@ API_INIT = "https://webarena.app/api/1.1/init/data"
 
 PADRAO_HORARIO = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(Livre|Indispon\w+)", re.IGNORECASE)
 
+# Períodos percorridos quando coletar_horarios recebe periodo=None ("buscar todos").
+# Se o site mudar os rótulos, ajuste aqui.
+PERIODOS_PADRAO = ["Manhã", "Tarde", "Noite"]
+
 
 # ---------------------------------------------------------------------------
 # TÉCNICA 1 — API JSON direta (sem navegador)
@@ -46,30 +50,27 @@ def listar_esportes() -> list[str]:
 # ---------------------------------------------------------------------------
 # TÉCNICA 2 — navegador real (Playwright) para os horários
 # ---------------------------------------------------------------------------
-def coletar_horarios(esporte: str, periodo: str, headless: bool = True) -> dict:
-    """Dirige o navegador para extrair os horários de um esporte/período."""
-    with sync_playwright() as p:
-        navegador = p.chromium.launch(headless=headless)
-        pagina = navegador.new_page()
+def _selecionar_periodo(pagina, periodo: str, texto_anterior: str) -> str:
+    """Clica no período e espera o conteúdo TROCAR (não apenas existir).
 
-        pagina.goto(URL_ARENA, wait_until="networkidle", timeout=60_000)
-        pagina.get_by_text(esporte, exact=True).first.click()
+    Ao alternar entre períodos, a página já contém horários do período anterior;
+    por isso não basta esperar "aparecer algum horário" — precisamos esperar o
+    texto MUDAR em relação ao que estava na tela antes do clique.
+    """
+    pagina.get_by_text(periodo, exact=True).first.click()
+    pagina.wait_for_function(
+        r"""(anterior) => {
+            const t = document.body.innerText;
+            return t !== anterior && /\d{1,2}:\d{2}\s*-\s*(Livre|Indispon)/i.test(t);
+        }""",
+        arg=texto_anterior,
+        timeout=15_000,
+    )
+    return pagina.locator("body").inner_text()
 
-        hoje = pagina.locator(".picker__day--today").first
-        hoje.wait_for(state="visible", timeout=15_000)
-        hoje.click()
 
-        pagina.get_by_text("Horários disponíveis").first.wait_for(timeout=15_000)
-        pagina.get_by_text(periodo, exact=True).first.click()
-
-        # espera inteligente: aguarda um horário de fato aparecer
-        pagina.wait_for_function(
-            r"() => /\d{1,2}:\d{2}\s*-\s*(Livre|Indispon)/i.test(document.body.innerText)",
-            timeout=15_000,
-        )
-        texto = pagina.locator("body").inner_text()
-        navegador.close()
-
+def _extrair_dados(texto: str, esporte: str, periodo: str) -> dict:
+    """Transforma o texto bruto da página no dicionário de saída de um período."""
     m = re.search(r"^(FUTSAL.*)$", texto, re.MULTILINE)
     categoria = m.group(1).strip() if m else None
     horarios = [
@@ -85,6 +86,45 @@ def coletar_horarios(esporte: str, periodo: str, headless: bool = True) -> dict:
     }
 
 
+def coletar_horarios(
+    esporte: str, periodo: str | None = None, headless: bool = True
+) -> list[dict]:
+    """Dirige o navegador para extrair os horários de um esporte.
+
+    Se `periodo` for informado, coleta só aquele período. Se for None, percorre
+    todos os períodos de PERIODOS_PADRAO. Retorna SEMPRE uma lista (um item por
+    período coletado), mesmo quando há um único período.
+    """
+    with sync_playwright() as p:
+        navegador = p.chromium.launch(headless=headless)
+        pagina = navegador.new_page()
+
+        # --- setup comum: feito UMA vez, reaproveitado por todos os períodos ---
+        pagina.goto(URL_ARENA, wait_until="networkidle", timeout=60_000)
+        pagina.get_by_text(esporte, exact=True).first.click()
+
+        hoje = pagina.locator(".picker__day--today").first
+        hoje.wait_for(state="visible", timeout=15_000)
+        hoje.click()
+
+        pagina.get_by_text("Horários disponíveis").first.wait_for(timeout=15_000)
+
+        # --- decide o que iterar: um período específico ou todos ---
+        periodos = [periodo] if periodo else PERIODOS_PADRAO
+
+        # --- loop: um clique + extração por período, na mesma página ---
+        texto_anterior = pagina.locator("body").inner_text()
+        resultados = []
+        for periodo_atual in periodos:
+            texto = _selecionar_periodo(pagina, periodo_atual, texto_anterior)
+            resultados.append(_extrair_dados(texto, esporte, periodo_atual))
+            texto_anterior = texto
+
+        navegador.close()
+
+    return resultados
+
+
 # ---------------------------------------------------------------------------
 # Programa principal — junta as duas técnicas
 # ---------------------------------------------------------------------------
@@ -97,22 +137,23 @@ def main() -> None:
         print(f"   {i}. {e}")
 
     esporte = "Futebol de salão"
-    periodo = "Noite"
-    print(f"\n>> TÉCNICA 2 (Playwright): horários de '{esporte}' / '{periodo}'...")
-    dados = coletar_horarios(esporte, periodo, headless=not modo_visivel)
+    print(f"\n>> TÉCNICA 2 (Playwright): horários de '{esporte}' (todos os períodos)...")
+    resultados = coletar_horarios(esporte, periodo=None, headless=not modo_visivel)
 
-    print("\n" + "=" * 46)
-    print(f"  {dados['esporte']}  |  Período: {dados['periodo']}")
-    if dados["categoria"]:
-        print(f"  {dados['categoria']}")
-    print(f"  Coletado em: {dados['coletado_em']}")
-    print("=" * 46)
-    for h in dados["horarios"]:
-        marca = "🟢" if h["status"].lower() == "livre" else "🔴"
-        print(f"  {marca} {h['hora']}  -  {h['status']}")
-    livres = [h["hora"] for h in dados["horarios"] if h["status"].lower() == "livre"]
-    print("=" * 46)
-    print(f"  Livres: {len(livres)}  ->  {', '.join(livres) or '(nenhum)'}\n")
+    for dados in resultados:
+        print("\n" + "=" * 46)
+        print(f"  {dados['esporte']}  |  Período: {dados['periodo']}")
+        if dados["categoria"]:
+            print(f"  {dados['categoria']}")
+        print(f"  Coletado em: {dados['coletado_em']}")
+        print("=" * 46)
+        for h in dados["horarios"]:
+            marca = "🟢" if h["status"].lower() == "livre" else "🔴"
+            print(f"  {marca} {h['hora']}  -  {h['status']}")
+        livres = [h["hora"] for h in dados["horarios"] if h["status"].lower() == "livre"]
+        print("=" * 46)
+        print(f"  Livres: {len(livres)}  ->  {', '.join(livres) or '(nenhum)'}")
+    print()
 
 
 if __name__ == "__main__":
