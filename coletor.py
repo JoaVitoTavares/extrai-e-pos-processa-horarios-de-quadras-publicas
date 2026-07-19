@@ -70,18 +70,25 @@ def _selecionar_periodo(pagina, periodo: str, texto_anterior: str) -> str:
 
 
 def _extrair_dados(texto: str, esporte: str, periodo: str) -> dict:
-    """Transforma o texto bruto da página no dicionário de saída de um período."""
+    """Transforma o texto bruto da página no dicionário de saída de um período.
+
+    Se nenhum horário for encontrado, preenche `aviso` sinalizando que não foi
+    possível coletar os dados daquele período (em vez de devolver silenciosamente
+    uma lista vazia, que seria ambígua).
+    """
     m = re.search(r"^(FUTSAL.*)$", texto, re.MULTILINE)
     categoria = m.group(1).strip() if m else None
     horarios = [
         {"hora": h, "status": s.capitalize()}
         for h, s in PADRAO_HORARIO.findall(texto)
     ]
+    aviso = None if horarios else "Não foi possível coletar os horários deste período."
     return {
         "coletado_em": datetime.now().isoformat(timespec="seconds"),
         "esporte": esporte,
         "periodo": periodo,
         "categoria": categoria,
+        "aviso": aviso,
         "horarios": horarios,
     }
 
@@ -147,6 +154,10 @@ def main() -> None:
             print(f"  {dados['categoria']}")
         print(f"  Coletado em: {dados['coletado_em']}")
         print("=" * 46)
+        if dados["aviso"]:
+            print(f"  ⚠️  {dados['aviso']}")
+            print("=" * 46)
+            continue
         for h in dados["horarios"]:
             marca = "🟢" if h["status"].lower() == "livre" else "🔴"
             print(f"  {marca} {h['hora']}  -  {h['status']}")
