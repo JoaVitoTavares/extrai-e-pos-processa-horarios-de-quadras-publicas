@@ -1,19 +1,4 @@
-"""
-Coletor SP Sports — as DUAS técnicas juntas
-============================================
-
-Este módulo demonstra a "escada" do scraping usando cada degrau onde ele é
-mais eficiente:
-
-  TÉCNICA 1 (leve)  -> API JSON direta, com requests, para LISTAR OS ESPORTES.
-                       Não abre navegador. É a chamada /api/1.1/init/data que
-                       descobrimos farejando a rede (ver sniffer.py).
-
-  TÉCNICA 2 (pesada) -> Playwright (navegador real) para os HORÁRIOS, que vêm
-                        de uma busca criptografada e só a página sabe montar.
-
-Regra de ouro: use JSON quando puder, navegador só quando precisar.
-"""
+"""Coletor de horários de quadras do SP Sports (webarena.app)."""
 
 import re
 import sys
@@ -23,19 +8,12 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 URL_ARENA = "https://webarena.app/arena/sp-sports"
 API_INIT = "https://webarena.app/api/1.1/init/data"
-
 PADRAO_HORARIO = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(Livre|Indispon\w+)", re.IGNORECASE)
-
-# Períodos percorridos quando coletar_horarios recebe periodo=None ("buscar todos").
-# Se o site mudar os rótulos, ajuste aqui.
 PERIODOS_PADRAO = ["Manhã", "Tarde", "Noite"]
 
 
-# ---------------------------------------------------------------------------
-# TÉCNICA 1 — API JSON direta (sem navegador)
-# ---------------------------------------------------------------------------
 def listar_esportes() -> list[str]:
-    """Pega a lista de esportes chamando a API JSON diretamente."""
+    """Lista os esportes chamando a API JSON diretamente, sem abrir navegador."""
     resposta = requests.get(
         API_INIT,
         params={"location": URL_ARENA},
@@ -47,16 +25,10 @@ def listar_esportes() -> list[str]:
     return dados[0]["data"]["esportes_list_text"]
 
 
-# ---------------------------------------------------------------------------
-# TÉCNICA 2 — navegador real (Playwright) para os horários
-# ---------------------------------------------------------------------------
 def _selecionar_periodo(pagina, periodo: str, texto_anterior: str) -> str:
-    """Clica no período e espera o conteúdo TROCAR (não apenas existir).
-
-    Ao alternar entre períodos, a página já contém horários do período anterior;
-    por isso não basta esperar "aparecer algum horário" — precisamos esperar o
-    texto MUDAR em relação ao que estava na tela antes do clique.
-    """
+    """Clica no período e espera o conteúdo trocar de fato: como a página já
+    mostra os horários do período anterior, aguardar "aparecer algum horário"
+    não basta, então esperamos o texto mudar em relação ao anterior ao clique."""
     pagina.get_by_text(periodo, exact=True).first.click()
     pagina.wait_for_function(
         r"""(anterior) => {
@@ -70,12 +42,9 @@ def _selecionar_periodo(pagina, periodo: str, texto_anterior: str) -> str:
 
 
 def _extrair_dados(texto: str, esporte: str, periodo: str) -> dict:
-    """Transforma o texto bruto da página no dicionário de saída de um período.
-
-    Se nenhum horário for encontrado, preenche `aviso` sinalizando que não foi
-    possível coletar os dados daquele período (em vez de devolver silenciosamente
-    uma lista vazia, que seria ambígua).
-    """
+    """Converte o texto bruto da página no dicionário de saída do período; se
+    nenhum horário é encontrado, preenche `aviso` sinalizando que não foi
+    possível coletar aquele período, em vez de devolver uma lista vazia ambígua."""
     m = re.search(r"^(FUTSAL.*)$", texto, re.MULTILINE)
     categoria = m.group(1).strip() if m else None
     horarios = [
@@ -96,17 +65,13 @@ def _extrair_dados(texto: str, esporte: str, periodo: str) -> dict:
 def coletar_horarios(
     esporte: str, periodo: str | None = None, headless: bool = True
 ) -> list[dict]:
-    """Dirige o navegador para extrair os horários de um esporte.
-
-    Se `periodo` for informado, coleta só aquele período. Se for None, percorre
-    todos os períodos de PERIODOS_PADRAO. Retorna SEMPRE uma lista (um item por
-    período coletado), mesmo quando há um único período.
-    """
+    """Abre o navegador uma vez e extrai os horários de um esporte. Com `periodo`
+    informado coleta apenas aquele; com None percorre PERIODOS_PADRAO. Retorna
+    sempre uma lista, com um item por período coletado."""
     with sync_playwright() as p:
         navegador = p.chromium.launch(headless=headless)
         pagina = navegador.new_page()
 
-        # --- setup comum: feito UMA vez, reaproveitado por todos os períodos ---
         pagina.goto(URL_ARENA, wait_until="networkidle", timeout=60_000)
         pagina.get_by_text(esporte, exact=True).first.click()
 
@@ -116,10 +81,8 @@ def coletar_horarios(
 
         pagina.get_by_text("Horários disponíveis").first.wait_for(timeout=15_000)
 
-        # --- decide o que iterar: um período específico ou todos ---
         periodos = [periodo] if periodo else PERIODOS_PADRAO
 
-        # --- loop: um clique + extração por período, na mesma página ---
         texto_anterior = pagina.locator("body").inner_text()
         resultados = []
         for periodo_atual in periodos:
@@ -132,10 +95,8 @@ def coletar_horarios(
     return resultados
 
 
-# ---------------------------------------------------------------------------
-# Programa principal — junta as duas técnicas
-# ---------------------------------------------------------------------------
 def main() -> None:
+    """Executa as duas técnicas em sequência e imprime os horários no terminal."""
     modo_visivel = "--ver" in sys.argv
 
     print(">> TÉCNICA 1 (API JSON, sem navegador): listando esportes...\n")
