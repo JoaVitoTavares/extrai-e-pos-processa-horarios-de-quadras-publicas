@@ -1,15 +1,23 @@
 """Coletor de horários de quadras do SP Sports (webarena.app)."""
 
+import os
 import re
 import sys
 import requests
-from datetime import datetime
+import pandas as pd
+from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 URL_ARENA = "https://webarena.app/arena/sp-sports"
 API_INIT = "https://webarena.app/api/1.1/init/data"
 PADRAO_HORARIO = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(Livre|Indispon\w+)", re.IGNORECASE)
-PERIODOS_PADRAO = ["Manhã", "Tarde", "Noite"]
+PERIODOS_PADRAO = ["Tarde", "Noite"]
+CAMINHO_CSV = "extracoes.csv"
+COLUNAS_CSV = [
+    "data", "esporte", "periodo", "horario_inicio", "horario_fim", "status",
+    "valor_horario", "ultima_atualizacao", "tipo_quadra", "clima",
+    "temperatura", "umidade", "feriado", "evento_grande", "jogo_em_porto_alegre",
+]
 
 
 def listar_esportes() -> list[str]:
@@ -95,6 +103,66 @@ def coletar_horarios(
     return resultados
 
 
+def _achatar_linhas(resultados: list[dict], agora: datetime) -> list[dict]:
+    """Achata a lista de períodos em linhas de reserva prontas para o CSV, pulando
+    períodos sem dados (com aviso), derivando horario_fim (início + 1h) e colapsando
+    horários repetidos na mesma extração — de cada slot fica sempre o último."""
+    data = agora.date().isoformat()
+    por_chave = {}
+    for periodo in resultados:
+        if periodo["aviso"]:
+            continue
+        for h in periodo["horarios"]:
+            inicio = datetime.strptime(h["hora"], "%H:%M")
+            fim = (inicio + timedelta(hours=1)).strftime("%H:%M")
+            por_chave[(data, periodo["esporte"], h["hora"])] = {
+                "data": data,
+                "esporte": periodo["esporte"],
+                "periodo": periodo["periodo"],
+                "horario_inicio": h["hora"],
+                "horario_fim": fim,
+                "status": h["status"],
+                "ultima_atualizacao": agora.isoformat(timespec="seconds"),
+            }
+    return list(por_chave.values())
+
+
+def salvar_extracao(resultados: list[dict], caminho_csv: str = CAMINHO_CSV, agora=None):
+    """Grava a extração no CSV com upsert por (data, esporte, horario_inicio): um
+    slot novo é sempre inserido; um slot já existente só é atualizado enquanto
+    `agora < horario_inicio`, congelando quando o horário chega ou passa."""
+    agora = agora or datetime.now()
+    linhas = _achatar_linhas(resultados, agora)
+    if not linhas:
+        return
+
+    if os.path.exists(caminho_csv):
+        df = pd.read_csv(caminho_csv, dtype=str, keep_default_na=False)
+    else:
+        df = pd.DataFrame(columns=COLUNAS_CSV)
+
+    for linha in linhas:
+        inicio = datetime.strptime(linha["horario_inicio"], "%H:%M").time()
+        slot_dt = datetime.combine(agora.date(), inicio)
+        existente = (
+            (df["data"] == linha["data"])
+            & (df["esporte"] == linha["esporte"])
+            & (df["horario_inicio"] == linha["horario_inicio"])
+        )
+        if not existente.any():
+            nova = pd.DataFrame([linha]).reindex(columns=COLUNAS_CSV, fill_value="")
+            df = pd.concat([df, nova], ignore_index=True)
+        elif agora < slot_dt:
+            df.loc[existente, ["periodo", "horario_fim", "status", "ultima_atualizacao"]] = [
+                linha["periodo"],
+                linha["horario_fim"],
+                linha["status"],
+                linha["ultima_atualizacao"],
+            ]
+
+    df.reindex(columns=COLUNAS_CSV, fill_value="").to_csv(caminho_csv, index=False)
+
+
 def main() -> None:
     """Executa as duas técnicas em sequência e imprime os horários no terminal."""
     modo_visivel = "--ver" in sys.argv
@@ -125,7 +193,9 @@ def main() -> None:
         livres = [h["hora"] for h in dados["horarios"] if h["status"].lower() == "livre"]
         print("=" * 46)
         print(f"  Livres: {len(livres)}  ->  {', '.join(livres) or '(nenhum)'}")
-    print()
+
+    salvar_extracao(resultados)
+    print(f"\n>> Extração salva/atualizada em {CAMINHO_CSV}\n")
 
 
 if __name__ == "__main__":
