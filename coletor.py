@@ -11,7 +11,7 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 URL_ARENA = "https://webarena.app/arena/sp-sports"
 API_INIT = "https://webarena.app/api/1.1/init/data"
 PADRAO_HORARIO = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(Livre|Indispon\w+)", re.IGNORECASE)
-PERIODOS_PADRAO = ["Tarde", "Noite"]
+PERIODOS_PADRAO = ["Manhã", "Tarde", "Noite"]
 CAMINHO_CSV = "extracoes.csv"
 COLUNAS_CSV = [
     "data", "esporte", "periodo", "horario_inicio", "horario_fim", "status",
@@ -74,8 +74,9 @@ def coletar_horarios(
     esporte: str, periodo: str | None = None, headless: bool = True
 ) -> list[dict]:
     """Abre o navegador uma vez e extrai os horários de um esporte. Com `periodo`
-    informado coleta apenas aquele; com None percorre PERIODOS_PADRAO. Retorna
-    sempre uma lista, com um item por período coletado."""
+    informado coleta apenas aquele; com None percorre PERIODOS_PADRAO. Um período
+    que não carrega a tempo (ex.: já passou) vira um item "sem dados" e a coleta
+    segue. Retorna sempre uma lista, com um item por período."""
     with sync_playwright() as p:
         navegador = p.chromium.launch(headless=headless)
         pagina = navegador.new_page()
@@ -94,9 +95,12 @@ def coletar_horarios(
         texto_anterior = pagina.locator("body").inner_text()
         resultados = []
         for periodo_atual in periodos:
-            texto = _selecionar_periodo(pagina, periodo_atual, texto_anterior)
-            resultados.append(_extrair_dados(texto, esporte, periodo_atual))
-            texto_anterior = texto
+            try:
+                texto = _selecionar_periodo(pagina, periodo_atual, texto_anterior)
+                resultados.append(_extrair_dados(texto, esporte, periodo_atual))
+            except PWTimeout:
+                resultados.append(_extrair_dados("", esporte, periodo_atual))
+            texto_anterior = pagina.locator("body").inner_text()
 
         navegador.close()
 
