@@ -36,7 +36,8 @@ def listar_esportes() -> list[str]:
 def _selecionar_periodo(pagina, periodo: str, texto_anterior: str) -> str:
     """Clica no período e espera o conteúdo trocar de fato: como a página já
     mostra os horários do período anterior, aguardar "aparecer algum horário"
-    não basta, então esperamos o texto mudar em relação ao anterior ao clique."""
+    não basta, então esperamos o texto mudar em relação ao anterior ao clique.
+    Se o conteúdo não trocar em 6s, o período é dado como indisponível (PWTimeout)."""
     pagina.get_by_text(periodo, exact=True).first.click()
     pagina.wait_for_function(
         r"""(anterior) => {
@@ -44,7 +45,7 @@ def _selecionar_periodo(pagina, periodo: str, texto_anterior: str) -> str:
             return t !== anterior && /\d{1,2}:\d{2}\s*-\s*(Livre|Indispon)/i.test(t);
         }""",
         arg=texto_anterior,
-        timeout=15_000,
+        timeout=6_000,
     )
     return pagina.locator("body").inner_text()
 
@@ -75,8 +76,8 @@ def coletar_horarios(
 ) -> list[dict]:
     """Abre o navegador uma vez e extrai os horários de um esporte. Com `periodo`
     informado coleta apenas aquele; com None percorre PERIODOS_PADRAO. Um período
-    que não carrega a tempo (ex.: já passou) vira um item "sem dados" e a coleta
-    segue. Retorna sempre uma lista, com um item por período."""
+    cujo conteúdo não troca em 6s é dado como indisponível e pulado. Retorna sempre
+    uma lista, com um item por período coletado."""
     with sync_playwright() as p:
         navegador = p.chromium.launch(headless=headless)
         pagina = navegador.new_page()
@@ -99,7 +100,7 @@ def coletar_horarios(
                 texto = _selecionar_periodo(pagina, periodo_atual, texto_anterior)
                 resultados.append(_extrair_dados(texto, esporte, periodo_atual))
             except PWTimeout:
-                resultados.append(_extrair_dados("", esporte, periodo_atual))
+                continue
             texto_anterior = pagina.locator("body").inner_text()
 
         navegador.close()
