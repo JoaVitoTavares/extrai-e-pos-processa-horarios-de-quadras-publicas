@@ -71,6 +71,64 @@ def _extrair_dados(texto: str, esporte: str, periodo: str) -> dict:
     }
 
 
+def _preco_para_float(bruto: str) -> float | None:
+    """Converte um preço em texto (ex.: 'R$ 1.500,00' ou 'R$150') para float,
+    descartando o que não for dígito ou vírgula e tratando o ponto como separador
+    de milhar e a vírgula como decimal. Retorna None se não sobrar número."""
+    limpo = re.sub(r"[^\d,]", "", bruto).replace(",", ".")
+    try:
+        return float(limpo)
+    except ValueError:
+        return None
+
+
+def _preco_do_slot(textos: list[str]) -> float | None:
+    """Escolhe o preço de um slot a partir dos textos das opções de duração (ex.:
+    '60 min. R$150'): prefere sempre a opção de 60 min e, na falta dela, usa a
+    primeira opção com preço. Retorna o valor em float ou None."""
+    candidatos = []
+    for texto in textos:
+        preco = re.search(r"R\$\s*([\d.,]+)", texto)
+        if not preco:
+            continue
+        minutos = re.search(r"(\d+)\s*min", texto, re.IGNORECASE)
+        candidatos.append(
+            (int(minutos.group(1)) if minutos else None, _preco_para_float(preco.group(1)))
+        )
+    for minutos, valor in candidatos:
+        if minutos == 60:
+            return valor
+    return candidatos[0][1] if candidatos else None
+
+
+def _coletar_precos(pagina, horarios: list[dict]) -> None:
+    """Para cada horário 'Livre', clica no cabeçalho do slot para revelar as opções
+    de duração e grava em `valor` o preço de 60 min (ou o único disponível) em float.
+    Indisponíveis e slots cujo preço não abre a tempo ficam sem `valor`."""
+    for h in horarios:
+        if h["status"].lower() != "livre":
+            continue
+        try:
+            cabecalho = pagina.get_by_text(h["hora"], exact=True).first.locator(
+                "xpath=ancestor::div[contains(@class,'clickable-element')][1]"
+            )
+            opcoes = cabecalho.locator(
+                "xpath=following-sibling::div[contains(@class,'RepeatingGroup')]"
+                "//div[contains(@class,'group-item')]"
+            )
+            cabecalho.click(timeout=3_000)
+            try:
+                opcoes.first.wait_for(state="attached", timeout=3_000)
+            except PWTimeout:
+                pass
+            textos = opcoes.all_text_contents() + [cabecalho.text_content() or ""]
+        except PWTimeout:
+            continue
+        valor = _preco_do_slot(textos)
+        if valor is not None:
+            h["valor"] = valor
+
+
 def coletar_horarios(
     esporte: str, periodo: str | None = None, headless: bool = True
 ) -> list[dict]:
@@ -98,9 +156,11 @@ def coletar_horarios(
         for periodo_atual in periodos:
             try:
                 texto = _selecionar_periodo(pagina, periodo_atual, texto_anterior)
-                resultados.append(_extrair_dados(texto, esporte, periodo_atual))
             except PWTimeout:
                 continue
+            dados = _extrair_dados(texto, esporte, periodo_atual)
+            _coletar_precos(pagina, dados["horarios"])
+            resultados.append(dados)
             texto_anterior = pagina.locator("body").inner_text()
 
         navegador.close()
@@ -127,6 +187,7 @@ def _achatar_linhas(resultados: list[dict], agora: datetime) -> list[dict]:
                 "horario_inicio": h["hora"],
                 "horario_fim": fim,
                 "status": h["status"],
+                "valor_horario": h.get("valor", ""),
                 "ultima_atualizacao": agora.isoformat(timespec="seconds"),
             }
     return list(por_chave.values())
@@ -158,10 +219,11 @@ def salvar_extracao(resultados: list[dict], caminho_csv: str = CAMINHO_CSV, agor
             nova = pd.DataFrame([linha]).reindex(columns=COLUNAS_CSV, fill_value="")
             df = pd.concat([df, nova], ignore_index=True)
         elif agora < slot_dt:
-            df.loc[existente, ["periodo", "horario_fim", "status", "ultima_atualizacao"]] = [
+            df.loc[existente, ["periodo", "horario_fim", "status", "valor_horario", "ultima_atualizacao"]] = [
                 linha["periodo"],
                 linha["horario_fim"],
                 linha["status"],
+                linha["valor_horario"],
                 linha["ultima_atualizacao"],
             ]
 
@@ -194,7 +256,8 @@ def main() -> None:
             continue
         for h in dados["horarios"]:
             marca = "🟢" if h["status"].lower() == "livre" else "🔴"
-            print(f"  {marca} {h['hora']}  -  {h['status']}")
+            preco = f"  R$ {h['valor']:.2f}" if h.get("valor") is not None else ""
+            print(f"  {marca} {h['hora']}  -  {h['status']}{preco}")
         livres = [h["hora"] for h in dados["horarios"] if h["status"].lower() == "livre"]
         print("=" * 46)
         print(f"  Livres: {len(livres)}  ->  {', '.join(livres) or '(nenhum)'}")
