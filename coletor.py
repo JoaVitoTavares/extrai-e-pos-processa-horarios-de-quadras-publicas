@@ -3,6 +3,7 @@
 import os
 import re
 import sys
+import unicodedata
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
@@ -11,13 +12,63 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 URL_ARENA = "https://webarena.app/arena/sp-sports"
 API_INIT = "https://webarena.app/api/1.1/init/data"
 PADRAO_HORARIO = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(Livre|Indispon\w+)", re.IGNORECASE)
+PADRAO_DESCOBERTA = re.compile(r"extern|descobert", re.IGNORECASE)
+PADRAO_COBERTA = re.compile(r"intern|cobert", re.IGNORECASE)
+PADRAO_FUTSAL = re.compile(r"futsal|futebol de sal", re.IGNORECASE)
 PERIODOS_PADRAO = ["Manhã", "Tarde", "Noite"]
+TIPOS_QUADRA = ["Vôlei de praia", "Futebol de salão", "Grama 7", "Grama 5"]
+SELETOR_QUADRAS = "div.bubble-rg-flex-row > div.group-item"
 CAMINHO_CSV = "extracoes.csv"
+SUFIXO_CSV = "-extracoes.csv"
 COLUNAS_CSV = [
     "data", "esporte", "periodo", "horario_inicio", "horario_fim", "status",
-    "valor_horario", "ultima_atualizacao", "tipo_quadra", "clima",
+    "valor_horario", "ultima_atualizacao", "tipo_quadra", "quadra_coberta", "clima",
     "temperatura", "umidade", "feriado", "evento_grande", "jogo_em_porto_alegre",
 ]
+
+
+def _sem_acento(texto: str) -> str:
+    """Devolve o texto sem sinais diacríticos, para comparar e montar nomes de arquivo
+    sem depender de o site escrever 'Vôlei' ou 'Volei'."""
+    decomposto = unicodedata.normalize("NFKD", texto)
+    return "".join(c for c in decomposto if not unicodedata.combining(c))
+
+
+def _slug(nome: str) -> str:
+    """Converte o nome de uma quadra em identificador de arquivo: minúsculo, sem acento
+    e com qualquer sequência de pontuação ou espaço virando um hífen só."""
+    return re.sub(r"[^a-z0-9]+", "-", _sem_acento(nome).lower()).strip("-")
+
+
+def caminho_csv_da_quadra(nome: str, diretorio: str = "") -> str:
+    """Monta o caminho do CSV daquela quadra, já que cada quadra tem o seu: assim o
+    horário de uma nunca disputa linha com o horário de outra."""
+    return os.path.join(diretorio, _slug(nome) + SUFIXO_CSV)
+
+
+def _quadra_coberta(nome: str | None) -> str:
+    """Classifica a quadra pelo nome: interna ou coberta é 'true', externa ou descoberta
+    é 'false'. Descoberta é testada primeiro porque contém 'coberta'. Sem nome ou sem
+    palavra-chave devolve vazio, para não afirmar um 'false' que não foi observado."""
+    if not nome:
+        return ""
+    if PADRAO_DESCOBERTA.search(nome):
+        return "false"
+    if PADRAO_COBERTA.search(nome):
+        return "true"
+    return ""
+
+
+def _tipo_quadra(esporte: str, nome_quadra: str | None) -> str:
+    """Canoniza o esporte selecionado para um dos tipos de TIPOS_QUADRA, ignorando
+    acento. Quando o esporte não é reconhecido, 'FUTSAL' no nome da quadra resolve para
+    'Futebol de salão'; fora isso o esporte é devolvido como veio, sem perder dado."""
+    for tipo in TIPOS_QUADRA:
+        if _sem_acento(esporte).casefold() == _sem_acento(tipo).casefold():
+            return tipo
+    if nome_quadra and PADRAO_FUTSAL.search(_sem_acento(nome_quadra)):
+        return "Futebol de salão"
+    return esporte
 
 
 def listar_esportes() -> list[str]:
@@ -50,25 +101,43 @@ def _selecionar_periodo(pagina, periodo: str, texto_anterior: str) -> str:
     return pagina.locator("body").inner_text()
 
 
-def _extrair_dados(texto: str, esporte: str, periodo: str) -> dict:
-    """Converte o texto bruto da página no dicionário de saída do período; se
-    nenhum horário é encontrado, preenche `aviso` sinalizando que não foi
-    possível coletar aquele período, em vez de devolver uma lista vazia ambígua."""
-    m = re.search(r"^(FUTSAL.*)$", texto, re.MULTILINE)
-    categoria = m.group(1).strip() if m else None
-    horarios = [
-        {"hora": h, "status": s.capitalize()}
-        for h, s in PADRAO_HORARIO.findall(texto)
-    ]
-    aviso = None if horarios else "Não foi possível coletar os horários deste período."
-    return {
+def _extrair_quadras(pagina, esporte: str, periodo: str) -> list[dict]:
+    """Devolve um dicionário por quadra listada no período, lendo o texto de cada bloco
+    isoladamente para que os horários de uma quadra não se misturem com os da vizinha.
+    O nome da quadra é a primeira linha do bloco, e dele saem tipo e cobertura. Sem
+    nenhum bloco na tela, devolve um item único com `aviso`, sinalizando que não foi
+    possível coletar aquele período."""
+    quadras = []
+    for raiz in pagina.locator(SELETOR_QUADRAS).all():
+        texto = raiz.inner_text()
+        nome = texto.strip().splitlines()[0].strip()
+        quadras.append({
+            "coletado_em": datetime.now().isoformat(timespec="seconds"),
+            "esporte": esporte,
+            "periodo": periodo,
+            "quadra": nome,
+            "tipo_quadra": _tipo_quadra(esporte, nome),
+            "quadra_coberta": _quadra_coberta(nome),
+            "aviso": None,
+            "horarios": [
+                {"hora": h, "status": s.capitalize()}
+                for h, s in PADRAO_HORARIO.findall(texto)
+            ],
+            "raiz": raiz,
+        })
+    if quadras:
+        return quadras
+    return [{
         "coletado_em": datetime.now().isoformat(timespec="seconds"),
         "esporte": esporte,
         "periodo": periodo,
-        "categoria": categoria,
-        "aviso": aviso,
-        "horarios": horarios,
-    }
+        "quadra": None,
+        "tipo_quadra": _tipo_quadra(esporte, None),
+        "quadra_coberta": "",
+        "aviso": "Não foi possível coletar os horários deste período.",
+        "horarios": [],
+        "raiz": None,
+    }]
 
 
 def _preco_para_float(bruto: str) -> float | None:
