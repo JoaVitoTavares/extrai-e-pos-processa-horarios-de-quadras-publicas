@@ -18,7 +18,6 @@ PADRAO_FUTSAL = re.compile(r"futsal|futebol de sal", re.IGNORECASE)
 PERIODOS_PADRAO = ["Manhã", "Tarde", "Noite"]
 TIPOS_QUADRA = ["Vôlei de praia", "Futebol de salão", "Grama 7", "Grama 5"]
 SELETOR_QUADRAS = "div.bubble-rg-flex-row > div.group-item"
-CAMINHO_CSV = "extracoes.csv"
 SUFIXO_CSV = "-extracoes.csv"
 COLUNAS_CSV = [
     "data", "esporte", "periodo", "horario_inicio", "horario_fim", "status",
@@ -72,7 +71,10 @@ def _tipo_quadra(esporte: str, nome_quadra: str | None) -> str:
 
 
 def listar_esportes() -> list[str]:
-    """Lista os esportes chamando a API JSON diretamente, sem abrir navegador."""
+    """Lista os esportes chamando a API JSON diretamente, sem abrir navegador. Um JSON
+    fora do formato esperado levanta ValueError em vez de estourar um KeyError cru ou
+    devolver lista vazia: num coletor agendado, gravar nada em silêncio custa mais caro
+    do que falhar alto."""
     resposta = requests.get(
         API_INIT,
         params={"location": URL_ARENA},
@@ -81,14 +83,18 @@ def listar_esportes() -> list[str]:
     )
     resposta.raise_for_status()
     dados = resposta.json()
-    return dados[0]["data"]["esportes_list_text"]
+    try:
+        return dados[0]["data"]["esportes_list_text"]
+    except (KeyError, IndexError, TypeError) as erro:
+        raise ValueError(f"{API_INIT} devolveu JSON em formato inesperado: {erro}") from erro
 
 
-def _selecionar_periodo(pagina, periodo: str, texto_anterior: str) -> str:
+def _selecionar_periodo(pagina, periodo: str, texto_anterior: str, timeout_ms: int = 6_000) -> str:
     """Clica no período e espera o conteúdo trocar de fato: como a página já
     mostra os horários do período anterior, aguardar "aparecer algum horário"
     não basta, então esperamos o texto mudar em relação ao anterior ao clique.
-    Se o conteúdo não trocar em 6s, o período é dado como indisponível (PWTimeout)."""
+    Sem a troca dentro de `timeout_ms`, o período é dado como indisponível (PWTimeout);
+    o padrão curto existe para a coleta agendada não travar."""
     pagina.get_by_text(periodo, exact=True).first.click()
     pagina.wait_for_function(
         r"""(anterior) => {
@@ -96,9 +102,27 @@ def _selecionar_periodo(pagina, periodo: str, texto_anterior: str) -> str:
             return t !== anterior && /\d{1,2}:\d{2}\s*-\s*(Livre|Indispon)/i.test(t);
         }""",
         arg=texto_anterior,
-        timeout=6_000,
+        timeout=timeout_ms,
     )
     return pagina.locator("body").inner_text()
+
+
+def _esperar_quadras(pagina, tentativas: int = 12, intervalo_ms: int = 250) -> None:
+    """Espera os horários de todas as quadras terminarem de aparecer. O RepeatingGroup
+    interno de cada quadra é preenchido de forma assíncrona, e ler logo após a troca de
+    período pega só as primeiras prontas — as demais sairiam com zero horários e virariam
+    CSV vazio sem erro nenhum. Considera carregado quando a contagem total de slots se
+    repete em duas leituras seguidas."""
+    anterior = -1
+    for _ in range(tentativas):
+        atual = sum(
+            len(PADRAO_HORARIO.findall(raiz.inner_text()))
+            for raiz in pagina.locator(SELETOR_QUADRAS).all()
+        )
+        if atual == anterior:
+            return
+        anterior = atual
+        pagina.wait_for_timeout(intervalo_ms)
 
 
 def _extrair_quadras(pagina, esporte: str, periodo: str) -> list[dict]:
@@ -170,15 +194,17 @@ def _preco_do_slot(textos: list[str]) -> float | None:
     return candidatos[0][1] if candidatos else None
 
 
-def _coletar_precos(pagina, horarios: list[dict]) -> None:
+def _coletar_precos(raiz, horarios: list[dict]) -> None:
     """Para cada horário 'Livre', clica no cabeçalho do slot para revelar as opções
     de duração e grava em `valor` o preço de 60 min (ou o único disponível) em float.
-    Indisponíveis e slots cujo preço não abre a tempo ficam sem `valor`."""
+    Indisponíveis e slots cujo preço não abre a tempo ficam sem `valor`. `raiz` é o
+    locator da quadra, e não a página: quadras diferentes repetem o mesmo horário, e
+    buscar na página inteira traria sempre o preço da primeira."""
     for h in horarios:
         if h["status"].lower() != "livre":
             continue
         try:
-            cabecalho = pagina.get_by_text(h["hora"], exact=True).first.locator(
+            cabecalho = raiz.get_by_text(h["hora"], exact=True).first.locator(
                 "xpath=ancestor::div[contains(@class,'clickable-element')][1]"
             )
             opcoes = cabecalho.locator(
@@ -204,7 +230,7 @@ def coletar_horarios(
     """Abre o navegador uma vez e extrai os horários de um esporte. Com `periodo`
     informado coleta apenas aquele; com None percorre PERIODOS_PADRAO. Um período
     cujo conteúdo não troca em 6s é dado como indisponível e pulado. Retorna sempre
-    uma lista, com um item por período coletado."""
+    uma lista, com um item por quadra de cada período coletado."""
     with sync_playwright() as p:
         navegador = p.chromium.launch(headless=headless)
         pagina = navegador.new_page()
@@ -224,12 +250,13 @@ def coletar_horarios(
         resultados = []
         for periodo_atual in periodos:
             try:
-                texto = _selecionar_periodo(pagina, periodo_atual, texto_anterior)
+                _selecionar_periodo(pagina, periodo_atual, texto_anterior)
             except PWTimeout:
                 continue
-            dados = _extrair_dados(texto, esporte, periodo_atual)
-            _coletar_precos(pagina, dados["horarios"])
-            resultados.append(dados)
+            _esperar_quadras(pagina)
+            for quadra in _extrair_quadras(pagina, esporte, periodo_atual):
+                _coletar_precos(quadra.pop("raiz"), quadra["horarios"])
+                resultados.append(quadra)
             texto_anterior = pagina.locator("body").inner_text()
 
         navegador.close()
@@ -238,39 +265,39 @@ def coletar_horarios(
 
 
 def _achatar_linhas(resultados: list[dict], agora: datetime) -> list[dict]:
-    """Achata a lista de períodos em linhas de reserva prontas para o CSV, pulando
-    períodos sem dados (com aviso), derivando horario_fim (início + 1h) e colapsando
-    horários repetidos na mesma extração — de cada slot fica sempre o último."""
+    """Achata as quadras coletadas em linhas de reserva prontas para o CSV, pulando as
+    que vieram com aviso, derivando horario_fim (início + 1h) e colapsando horários
+    repetidos na mesma extração — de cada slot fica sempre o último. A chave de colapso
+    inclui a quadra, senão o mesmo horário em quadras diferentes viraria uma linha só."""
     data = agora.date().isoformat()
     por_chave = {}
-    for periodo in resultados:
-        if periodo["aviso"]:
+    for quadra in resultados:
+        if quadra["aviso"]:
             continue
-        for h in periodo["horarios"]:
+        for h in quadra["horarios"]:
             inicio = datetime.strptime(h["hora"], "%H:%M")
             fim = (inicio + timedelta(hours=1)).strftime("%H:%M")
-            por_chave[(data, periodo["esporte"], h["hora"])] = {
+            por_chave[(data, quadra["quadra"], h["hora"])] = {
                 "data": data,
-                "esporte": periodo["esporte"],
-                "periodo": periodo["periodo"],
+                "esporte": quadra["esporte"],
+                "periodo": quadra["periodo"],
                 "horario_inicio": h["hora"],
                 "horario_fim": fim,
                 "status": h["status"],
                 "valor_horario": h.get("valor", ""),
                 "ultima_atualizacao": agora.isoformat(timespec="seconds"),
+                "tipo_quadra": quadra["tipo_quadra"],
+                "quadra_coberta": quadra["quadra_coberta"],
+                "quadra": quadra["quadra"],
             }
     return list(por_chave.values())
 
 
-def salvar_extracao(resultados: list[dict], caminho_csv: str = CAMINHO_CSV, agora=None):
-    """Grava a extração no CSV com upsert por (data, esporte, horario_inicio): um
-    slot novo é sempre inserido; um slot já existente só é atualizado enquanto
-    `agora < horario_inicio`, congelando quando o horário chega ou passa."""
-    agora = agora or datetime.now()
-    linhas = _achatar_linhas(resultados, agora)
-    if not linhas:
-        return
-
+def _gravar_csv(caminho_csv: str, linhas: list[dict], agora: datetime) -> None:
+    """Grava as linhas de uma quadra no seu CSV com upsert por (data, esporte,
+    horario_inicio): um slot novo é sempre inserido; um slot já existente só é
+    atualizado enquanto `agora < horario_inicio`, congelando quando o horário chega ou
+    passa. A coluna auxiliar `quadra` cai fora no reindex, já que o arquivo é dela."""
     if os.path.exists(caminho_csv):
         df = pd.read_csv(caminho_csv, dtype=str, keep_default_na=False)
     else:
@@ -286,7 +313,7 @@ def salvar_extracao(resultados: list[dict], caminho_csv: str = CAMINHO_CSV, agor
         )
         if not existente.any():
             nova = pd.DataFrame([linha]).reindex(columns=COLUNAS_CSV, fill_value="")
-            df = pd.concat([df, nova], ignore_index=True)
+            df = nova if df.empty else pd.concat([df, nova], ignore_index=True)
         elif agora < slot_dt:
             df.loc[existente, ["periodo", "horario_fim", "status", "valor_horario", "ultima_atualizacao"]] = [
                 linha["periodo"],
@@ -297,6 +324,23 @@ def salvar_extracao(resultados: list[dict], caminho_csv: str = CAMINHO_CSV, agor
             ]
 
     df.reindex(columns=COLUNAS_CSV, fill_value="").to_csv(caminho_csv, index=False)
+
+
+def salvar_extracao(resultados: list[dict], diretorio: str = "", agora=None) -> list[str]:
+    """Distribui a extração em um CSV por quadra, criado na primeira vez que a quadra
+    aparece. É o que garante a unicidade do horário: o 17:00 de uma quadra nunca disputa
+    linha com o 17:00 de outra. Devolve os caminhos gravados."""
+    agora = agora or datetime.now()
+    por_quadra = {}
+    for linha in _achatar_linhas(resultados, agora):
+        por_quadra.setdefault(linha["quadra"], []).append(linha)
+
+    caminhos = []
+    for nome, linhas in por_quadra.items():
+        caminho_csv = caminho_csv_da_quadra(nome, diretorio)
+        _gravar_csv(caminho_csv, linhas, agora)
+        caminhos.append(caminho_csv)
+    return caminhos
 
 
 def main() -> None:
@@ -315,8 +359,9 @@ def main() -> None:
     for dados in resultados:
         print("\n" + "=" * 46)
         print(f"  {dados['esporte']}  |  Período: {dados['periodo']}")
-        if dados["categoria"]:
-            print(f"  {dados['categoria']}")
+        if dados["quadra"]:
+            cobertura = {"true": "coberta", "false": "descoberta"}.get(dados["quadra_coberta"], "?")
+            print(f"  {dados['quadra']}  ({cobertura})")
         print(f"  Coletado em: {dados['coletado_em']}")
         print("=" * 46)
         if dados["aviso"]:
@@ -331,8 +376,11 @@ def main() -> None:
         print("=" * 46)
         print(f"  Livres: {len(livres)}  ->  {', '.join(livres) or '(nenhum)'}")
 
-    salvar_extracao(resultados)
-    print(f"\n>> Extração salva/atualizada em {CAMINHO_CSV}\n")
+    caminhos = salvar_extracao(resultados)
+    print("\n>> Extração salva/atualizada em:")
+    for caminho in caminhos or ["(nenhum arquivo — nada foi coletado)"]:
+        print(f"   {caminho}")
+    print()
 
 
 if __name__ == "__main__":
