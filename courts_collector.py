@@ -1,7 +1,6 @@
 """Coletor de horários de quadras do SP Sports (webarena.app)."""
 
 import re
-import sys
 import time
 import requests
 from datetime import datetime
@@ -14,7 +13,7 @@ from config import (
     TIPOS_QUADRA,
     URL_ARENA,
 )
-from persistencia import salvar_extracao, sem_acento
+from persistencia import sem_acento
 
 PADRAO_HORARIO = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(Livre|Indispon\w+)", re.IGNORECASE)
 PADRAO_DESCOBERTA = re.compile(r"extern|descobert", re.IGNORECASE)
@@ -67,13 +66,21 @@ def listar_esportes() -> list[str]:
         raise ValueError(f"{API_INIT} devolveu JSON em formato inesperado: {erro}") from erro
 
 
-def _esportes_alvo(esportes_do_site: list[str]) -> list[str]:
+def esportes_alvo(esportes_do_site: list[str]) -> list[str]:
     """Seleciona, entre os esportes que o site lista hoje, os que correspondem aos tipos
     de quadra de interesse — os demais, como Beach Tennis e Handebol, ficam de fora.
     Devolve o nome como o site escreve, que é o que o clique na tela precisa, e ignora
     acento e caixa apenas na comparação."""
     procurados = {sem_acento(tipo).casefold() for tipo in TIPOS_QUADRA}
     return [nome for nome in esportes_do_site if sem_acento(nome).casefold() in procurados]
+
+
+def tipos_ausentes(alvos: list[str]) -> list[str]:
+    """Diz quais dos tipos de quadra de interesse não apareceram entre os esportes que o
+    site lista hoje. Serve de aviso na execução: um tipo que some do site sem ninguém
+    notar viraria uma lacuna silenciosa no histórico, e não um erro."""
+    encontrados = {_tipo_quadra(alvo, None) for alvo in alvos}
+    return [tipo for tipo in TIPOS_QUADRA if tipo not in encontrados]
 
 
 def _selecionar_periodo(pagina, periodo: str, texto_anterior: str, timeout_ms: int = 6_000) -> str:
@@ -251,70 +258,3 @@ def coletar_horarios(
         navegador.close()
 
     return resultados
-
-
-def main() -> None:
-    """Executa as duas técnicas em sequência e imprime os horários no terminal. A
-    técnica 2 percorre todos os tipos de quadra de interesse; um esporte que falhe é
-    reportado e pulado, para não derrubar a coleta dos demais, e uma execução que não
-    colete nada sai com erro em vez de gravar silêncio."""
-    modo_visivel = "--ver" in sys.argv
-
-    print(">> TÉCNICA 1 (API JSON, sem navegador): listando esportes...\n")
-    esportes = listar_esportes()
-    for i, e in enumerate(esportes, 1):
-        print(f"   {i}. {e}")
-
-    alvos = _esportes_alvo(esportes)
-    ausentes = [tipo for tipo in TIPOS_QUADRA if tipo not in {_tipo_quadra(a, None) for a in alvos}]
-    if ausentes:
-        print(f"\n[AVISO] tipos de quadra não encontrados no site: {', '.join(ausentes)}")
-
-    resultados = []
-    for esporte in alvos:
-        print(f"\n>> TÉCNICA 2 (Playwright): horários de '{esporte}' (todos os períodos)...")
-        try:
-            resultados.extend(coletar_horarios(esporte, periodo=None, headless=not modo_visivel))
-        except PWTimeout as erro:
-            print(f"[AVISO] '{esporte}' pulado por tempo esgotado: {erro}", file=sys.stderr)
-
-    for dados in resultados:
-        print("\n" + "=" * 46)
-        print(f"  {dados['esporte']}  |  Período: {dados['periodo']}")
-        if dados["quadra"]:
-            cobertura = {"true": "coberta", "false": "descoberta"}.get(dados["quadra_coberta"], "?")
-            print(f"  {dados['quadra']}  ({cobertura})")
-        print(f"  Coletado em: {dados['coletado_em']}")
-        print("=" * 46)
-        if dados["aviso"]:
-            print(f"  ⚠️  {dados['aviso']}")
-            print("=" * 46)
-            continue
-        for h in dados["horarios"]:
-            marca = "🟢" if h["status"].lower() == "livre" else "🔴"
-            preco = f"  R$ {h['valor']:.2f}" if h.get("valor") is not None else ""
-            print(f"  {marca} {h['hora']}  -  {h['status']}{preco}")
-        livres = [h["hora"] for h in dados["horarios"] if h["status"].lower() == "livre"]
-        print("=" * 46)
-        print(f"  Livres: {len(livres)}  ->  {', '.join(livres) or '(nenhum)'}")
-
-    caminhos = salvar_extracao(resultados)
-    if not caminhos:
-        print("\n[ERRO] nenhuma quadra coletada em nenhum esporte.", file=sys.stderr)
-        sys.exit(1)
-
-    print(f"\n>> Extração salva/atualizada em {len(caminhos)} arquivo(s):")
-    for caminho in caminhos:
-        print(f"   {caminho}")
-    print()
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except PWTimeout as e:
-        print(f"\n[ERRO] Tempo esgotado: {e}", file=sys.stderr)
-        sys.exit(1)
-    except requests.RequestException as e:
-        print(f"\n[ERRO] Falha na API JSON: {e}", file=sys.stderr)
-        sys.exit(1)

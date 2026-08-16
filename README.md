@@ -25,6 +25,25 @@ Um esporte que falhe por lentidão do site é reportado e pulado, sem derrubar a
 dos demais; uma execução que não colete nada sai com código de erro, em vez de gravar
 silêncio — o modo de falha mais caro num coletor agendado.
 
+## Os módulos
+
+| Arquivo | Papel |
+| --- | --- |
+| `main.py` | **Ponto de entrada.** Chama os coletores em sequência, imprime o relatório e manda gravar |
+| `config.py` | O que se edita: URL da arena, coordenadas, tipos de quadra, diretório de saída |
+| `courts_collector.py` | Coleta das reservas — API JSON e navegador. É biblioteca, não roda sozinho |
+| `persistencia.py` | Gravação do CSV por quadra, com upsert. Não depende do Playwright |
+
+A separação não é enfeite: `persistencia.py` é importado por quem não abre navegador
+nenhum, e o coletor carrega o Playwright já no `import`. Juntos, um consultaria o
+Chromium para ler o nome de uma coluna.
+
+## Configuração
+
+Tudo que muda de instalação para instalação vive em `config.py` — a URL da arena, as
+coordenadas usadas na consulta de clima e o diretório onde as extrações são gravadas.
+Trocar de arena é editar uma linha, sem abrir o coletor.
+
 ## Saída: um CSV por quadra
 
 Cada quadra encontrada ganha o seu próprio arquivo, `<slug-da-quadra>-extracoes.csv`,
@@ -47,8 +66,8 @@ python -m playwright install chromium
 
 ## Uso
 ```bash
-python courts_collector.py          # roda sem abrir janela (headless)
-python courts_collector.py --ver    # abre o navegador pra você ASSISTIR o passo a passo
+python main.py          # roda sem abrir janela (headless)
+python main.py --ver    # abre o navegador pra você ASSISTIR o passo a passo
 ```
 
 ## Testes
@@ -77,7 +96,7 @@ python scripts/capturar_fixtures.py   # regrava as fixtures com o HTML de hoje
 - **Agendar** de 15/30 min: `cron` em uma VPS Linux (`*/15 * * * *`)
 - **Alertar**: notificar quando um horário mudar de "Indisponível" para "Livre"
 - Parametrizar esporte/período/data via argumentos de linha de comando
-  (a função `coletar_horarios` já aceita `esporte` e `periodo`; o `main` percorre os
+  (a função `coletar_horarios` já aceita `esporte` e `periodo`; o `main.py` percorre os
   quatro tipos de quadra, mas não aceita recorte pela linha de comando)
 
 ## Conceito-chave

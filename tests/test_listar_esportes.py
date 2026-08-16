@@ -91,7 +91,7 @@ def test_json_em_formato_inesperado_falha_explicitamente(respostas, payload):
 def test_esportes_alvo_filtra_os_tipos_de_interesse():
     """A coleta percorre os quatro tipos de quadra que interessam ao TCC; Beach Tennis e
     Handebol existem no site mas ficam de fora."""
-    assert courts_collector._esportes_alvo(ESPORTES) == [
+    assert courts_collector.esportes_alvo(ESPORTES) == [
         "Futebol de salão", "Grama 5", "Grama 7", "Vôlei de praia"
     ]
 
@@ -99,7 +99,7 @@ def test_esportes_alvo_filtra_os_tipos_de_interesse():
 def test_esportes_alvo_devolve_o_nome_como_o_site_escreve():
     """O nome volta exatamente como veio da API, porque é ele que o clique procura na
     tela; a comparação é que ignora acento e caixa."""
-    assert courts_collector._esportes_alvo(["Volei de praia", "GRAMA 7"]) == ["Volei de praia", "GRAMA 7"]
+    assert courts_collector.esportes_alvo(["Volei de praia", "GRAMA 7"]) == ["Volei de praia", "GRAMA 7"]
 
 
 @pytest.mark.parametrize(
@@ -112,4 +112,20 @@ def test_esportes_alvo_devolve_o_nome_como_o_site_escreve():
 )
 def test_esportes_alvo_ignora_o_que_nao_interessa(do_site, esperado):
     """Um site sem alguns dos tipos devolve só os presentes, sem estourar."""
-    assert courts_collector._esportes_alvo(do_site) == esperado
+    assert courts_collector.esportes_alvo(do_site) == esperado
+
+
+def test_tipos_ausentes_lista_o_que_sumiu_do_site():
+    """Com os quatro tipos presentes não há aviso; faltando um, ele é nomeado — é assim
+    que uma quadra que sai do ar aparece na execução em vez de virar lacuna silenciosa
+    no histórico."""
+    assert courts_collector.tipos_ausentes(courts_collector.TIPOS_QUADRA) == []
+    assert courts_collector.tipos_ausentes(["Grama 5", "Grama 7"]) == [
+        "Vôlei de praia", "Futebol de salão"
+    ]
+
+
+def test_tipos_ausentes_reconhece_o_nome_sem_acento():
+    """O aviso não pode disparar só porque o site escreveu 'Volei' sem acento: o tipo é
+    canonizado antes da comparação."""
+    assert "Vôlei de praia" not in courts_collector.tipos_ausentes(["Volei de praia"])
