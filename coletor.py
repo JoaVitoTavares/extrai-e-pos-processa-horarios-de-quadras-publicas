@@ -3,6 +3,7 @@
 import os
 import re
 import sys
+import time
 import unicodedata
 import requests
 import pandas as pd
@@ -16,6 +17,7 @@ PADRAO_DESCOBERTA = re.compile(r"extern|descobert", re.IGNORECASE)
 PADRAO_COBERTA = re.compile(r"intern|cobert", re.IGNORECASE)
 PADRAO_FUTSAL = re.compile(r"futsal|futebol de sal", re.IGNORECASE)
 PERIODOS_PADRAO = ["Manhã", "Tarde", "Noite"]
+TIMEOUT_NAVEGACAO_MS = 30_000
 TIPOS_QUADRA = ["Vôlei de praia", "Futebol de salão", "Grama 7", "Grama 5"]
 SELETOR_QUADRAS = "div.bubble-rg-flex-row > div.group-item"
 SUFIXO_CSV = "-extracoes.csv"
@@ -89,6 +91,15 @@ def listar_esportes() -> list[str]:
         raise ValueError(f"{API_INIT} devolveu JSON em formato inesperado: {erro}") from erro
 
 
+def _esportes_alvo(esportes_do_site: list[str]) -> list[str]:
+    """Seleciona, entre os esportes que o site lista hoje, os que correspondem aos tipos
+    de quadra de interesse — os demais, como Beach Tennis e Handebol, ficam de fora.
+    Devolve o nome como o site escreve, que é o que o clique na tela precisa, e ignora
+    acento e caixa apenas na comparação."""
+    procurados = {_sem_acento(tipo).casefold() for tipo in TIPOS_QUADRA}
+    return [nome for nome in esportes_do_site if _sem_acento(nome).casefold() in procurados]
+
+
 def _selecionar_periodo(pagina, periodo: str, texto_anterior: str, timeout_ms: int = 6_000) -> str:
     """Clica no período e espera o conteúdo trocar de fato: como a página já
     mostra os horários do período anterior, aguardar "aparecer algum horário"
@@ -107,21 +118,23 @@ def _selecionar_periodo(pagina, periodo: str, texto_anterior: str, timeout_ms: i
     return pagina.locator("body").inner_text()
 
 
-def _esperar_quadras(pagina, tentativas: int = 12, intervalo_ms: int = 250) -> None:
-    """Espera os horários de todas as quadras terminarem de aparecer. O RepeatingGroup
-    interno de cada quadra é preenchido de forma assíncrona, e ler logo após a troca de
-    período pega só as primeiras prontas — as demais sairiam com zero horários e virariam
-    CSV vazio sem erro nenhum. Considera carregado quando a contagem total de slots se
-    repete em duas leituras seguidas."""
-    anterior = -1
-    for _ in range(tentativas):
-        atual = sum(
+def _esperar_quadras(pagina, timeout_ms: int = 5_000, intervalo_ms: int = 250) -> None:
+    """Espera todas as quadras do período terminarem de carregar. Cada RepeatingGroup
+    interno é preenchido de forma assíncrona e em ordem imprevisível, então ler cedo
+    devolve algumas quadras com zero horários — que sumiriam do CSV sem erro nenhum.
+    Só considera pronto quando toda quadra tem ao menos um horário; esperar a contagem
+    apenas estabilizar não serve, porque não distingue "terminou" de "ainda nem começou".
+    Esgotado o limite, segue com o que houver: a quadra pode estar mesmo sem horários."""
+    limite = time.monotonic() + timeout_ms / 1000
+    while True:
+        contagens = [
             len(PADRAO_HORARIO.findall(raiz.inner_text()))
             for raiz in pagina.locator(SELETOR_QUADRAS).all()
-        )
-        if atual == anterior:
+        ]
+        if contagens and all(contagens):
             return
-        anterior = atual
+        if time.monotonic() >= limite:
+            return
         pagina.wait_for_timeout(intervalo_ms)
 
 
@@ -239,10 +252,10 @@ def coletar_horarios(
         pagina.get_by_text(esporte, exact=True).first.click()
 
         hoje = pagina.locator(".picker__day--today").first
-        hoje.wait_for(state="visible", timeout=15_000)
+        hoje.wait_for(state="visible", timeout=TIMEOUT_NAVEGACAO_MS)
         hoje.click()
 
-        pagina.get_by_text("Horários disponíveis").first.wait_for(timeout=15_000)
+        pagina.get_by_text("Horários disponíveis").first.wait_for(timeout=TIMEOUT_NAVEGACAO_MS)
 
         periodos = [periodo] if periodo else PERIODOS_PADRAO
 
@@ -344,7 +357,10 @@ def salvar_extracao(resultados: list[dict], diretorio: str = "", agora=None) -> 
 
 
 def main() -> None:
-    """Executa as duas técnicas em sequência e imprime os horários no terminal."""
+    """Executa as duas técnicas em sequência e imprime os horários no terminal. A
+    técnica 2 percorre todos os tipos de quadra de interesse; um esporte que falhe é
+    reportado e pulado, para não derrubar a coleta dos demais, e uma execução que não
+    colete nada sai com erro em vez de gravar silêncio."""
     modo_visivel = "--ver" in sys.argv
 
     print(">> TÉCNICA 1 (API JSON, sem navegador): listando esportes...\n")
@@ -352,9 +368,18 @@ def main() -> None:
     for i, e in enumerate(esportes, 1):
         print(f"   {i}. {e}")
 
-    esporte = "Futebol de salão"
-    print(f"\n>> TÉCNICA 2 (Playwright): horários de '{esporte}' (todos os períodos)...")
-    resultados = coletar_horarios(esporte, periodo=None, headless=not modo_visivel)
+    alvos = _esportes_alvo(esportes)
+    ausentes = [tipo for tipo in TIPOS_QUADRA if tipo not in {_tipo_quadra(a, None) for a in alvos}]
+    if ausentes:
+        print(f"\n[AVISO] tipos de quadra não encontrados no site: {', '.join(ausentes)}")
+
+    resultados = []
+    for esporte in alvos:
+        print(f"\n>> TÉCNICA 2 (Playwright): horários de '{esporte}' (todos os períodos)...")
+        try:
+            resultados.extend(coletar_horarios(esporte, periodo=None, headless=not modo_visivel))
+        except PWTimeout as erro:
+            print(f"[AVISO] '{esporte}' pulado por tempo esgotado: {erro}", file=sys.stderr)
 
     for dados in resultados:
         print("\n" + "=" * 46)
@@ -377,8 +402,12 @@ def main() -> None:
         print(f"  Livres: {len(livres)}  ->  {', '.join(livres) or '(nenhum)'}")
 
     caminhos = salvar_extracao(resultados)
-    print("\n>> Extração salva/atualizada em:")
-    for caminho in caminhos or ["(nenhum arquivo — nada foi coletado)"]:
+    if not caminhos:
+        print("\n[ERRO] nenhuma quadra coletada em nenhum esporte.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"\n>> Extração salva/atualizada em {len(caminhos)} arquivo(s):")
+    for caminho in caminhos:
         print(f"   {caminho}")
     print()
 
