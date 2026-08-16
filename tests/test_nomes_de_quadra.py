@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-import coletor
+import courts_collector
 import persistencia
 
 
@@ -53,7 +53,7 @@ def test_quadra_coberta_classifica_pelo_nome(nome, esperado):
     palavra-chave fica vazio em vez de afirmar um false que não foi observado. O caso
     'descoberta' é o que exige testar descoberta antes de coberta, já que uma contém a
     outra."""
-    assert coletor._quadra_coberta(nome) == esperado
+    assert courts_collector._quadra_coberta(nome) == esperado
 
 
 @pytest.mark.parametrize(
@@ -72,4 +72,4 @@ def test_tipo_quadra_canoniza_o_esporte(esporte, nome, esperado):
     """O tipo sai do esporte selecionado, canonizado para os quatro tipos de interesse
     mesmo sem acento; futsal no nome da quadra resolve o caso em que o esporte não é
     reconhecido, e um esporte fora da lista é devolvido como veio, sem perder dado."""
-    assert coletor._tipo_quadra(esporte, nome) == esperado
+    assert courts_collector._tipo_quadra(esporte, nome) == esperado

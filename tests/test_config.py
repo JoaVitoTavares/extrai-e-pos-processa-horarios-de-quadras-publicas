@@ -2,19 +2,19 @@
 
 import pytest
 
-import coletor
 import config
+import courts_collector
 import persistencia
 
 
 @pytest.mark.parametrize(
     "modulo, nome",
     [
-        (coletor, "URL_ARENA"),
-        (coletor, "API_INIT"),
-        (coletor, "TIPOS_QUADRA"),
-        (coletor, "PERIODOS_PADRAO"),
-        (coletor, "TIMEOUT_NAVEGACAO_MS"),
+        (courts_collector, "URL_ARENA"),
+        (courts_collector, "API_INIT"),
+        (courts_collector, "TIPOS_QUADRA"),
+        (courts_collector, "PERIODOS_PADRAO"),
+        (courts_collector, "TIMEOUT_NAVEGACAO_MS"),
         (persistencia, "DIRETORIO_EXTRACOES"),
     ],
 )

@@ -47,8 +47,8 @@ python -m playwright install chromium
 
 ## Uso
 ```bash
-python coletor.py          # roda sem abrir janela (headless)
-python coletor.py --ver    # abre o navegador pra você ASSISTIR o passo a passo
+python courts_collector.py          # roda sem abrir janela (headless)
+python courts_collector.py --ver    # abre o navegador pra você ASSISTIR o passo a passo
 ```
 
 ## Testes

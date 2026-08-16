@@ -2,7 +2,7 @@
 
 import pytest
 
-import coletor
+import courts_collector
 
 HORARIOS_ESPERADOS = {
     "Areia 1 - Interna": [
@@ -31,7 +31,7 @@ def quadras_volei(carregar_fixture):
     """Extrai as quatro quadras de vôlei da fixture, ponto de partida da maior parte
     dos testes deste arquivo."""
     pagina = carregar_fixture("quatro_quadras_volei.html")
-    return coletor._extrair_quadras(pagina, "Vôlei de praia", "Noite")
+    return courts_collector._extrair_quadras(pagina, "Vôlei de praia", "Noite")
 
 
 def test_uma_entrada_por_quadra(quadras_volei):
@@ -104,7 +104,7 @@ def test_raiz_da_quadra_permite_escopar_o_clique(quadras_volei):
 def test_quadra_unica_continua_funcionando(carregar_fixture):
     """O caso de um esporte com uma quadra só — como o futsal de hoje — não regride."""
     pagina = carregar_fixture("quadra_unica_grama7.html")
-    quadras = coletor._extrair_quadras(pagina, "Grama 7", "Noite")
+    quadras = courts_collector._extrair_quadras(pagina, "Grama 7", "Noite")
 
     assert len(quadras) == 1
     assert quadras[0]["quadra"] == "GRAMA 7 - EXTERNA"
@@ -118,7 +118,7 @@ def test_pagina_sem_quadras_devolve_aviso(pagina):
     """Sem nenhum bloco de quadra na tela, o período vira um item único com aviso — o
     mesmo comportamento de hoje para período que não carregou."""
     pagina.set_content("<div></div>")
-    quadras = coletor._extrair_quadras(pagina, "Futebol de salão", "Manhã")
+    quadras = courts_collector._extrair_quadras(pagina, "Futebol de salão", "Manhã")
 
     assert len(quadras) == 1
     assert quadras[0]["quadra"] is None

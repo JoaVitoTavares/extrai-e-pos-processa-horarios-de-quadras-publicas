@@ -7,7 +7,7 @@ por isso fica atrás do marcador `rede` e não roda no `pytest` padrão.
 
 import pytest
 
-import coletor
+import courts_collector
 
 pytestmark = pytest.mark.rede
 
@@ -19,7 +19,7 @@ TIMEOUT_PERIODO_MS = 30_000
 @pytest.fixture(scope="module")
 def esportes_do_site():
     """Chama a API JSON de verdade uma vez por execução do módulo."""
-    return coletor.listar_esportes()
+    return courts_collector.listar_esportes()
 
 
 @pytest.fixture(scope="module")
@@ -28,7 +28,7 @@ def pagina_no_periodo(navegador):
     repetindo a mesma sequência que coletar_horarios usa — inclusive a espera pelas
     quadras assíncronas — para o canário exercitar o caminho de produção."""
     pagina = navegador.new_page()
-    pagina.goto(coletor.URL_ARENA, wait_until="networkidle", timeout=60_000)
+    pagina.goto(courts_collector.URL_ARENA, wait_until="networkidle", timeout=60_000)
     pagina.get_by_text(ESPORTE, exact=True).first.click()
 
     hoje = pagina.locator(".picker__day--today").first
@@ -36,10 +36,10 @@ def pagina_no_periodo(navegador):
     hoje.click()
 
     pagina.get_by_text("Horários disponíveis").first.wait_for(timeout=15_000)
-    coletor._selecionar_periodo(
+    courts_collector._selecionar_periodo(
         pagina, PERIODO, pagina.locator("body").inner_text(), timeout_ms=TIMEOUT_PERIODO_MS
     )
-    coletor._esperar_quadras(pagina)
+    courts_collector._esperar_quadras(pagina)
     yield pagina
     pagina.close()
 
@@ -47,7 +47,7 @@ def pagina_no_periodo(navegador):
 @pytest.fixture(scope="module")
 def quadras_do_site(pagina_no_periodo):
     """Extrai as quadras da página já carregada."""
-    return coletor._extrair_quadras(pagina_no_periodo, ESPORTE, PERIODO)
+    return courts_collector._extrair_quadras(pagina_no_periodo, ESPORTE, PERIODO)
 
 
 def test_api_ainda_lista_esportes(esportes_do_site):
@@ -58,7 +58,7 @@ def test_api_ainda_lista_esportes(esportes_do_site):
 def test_api_ainda_traz_os_tipos_de_interesse(esportes_do_site):
     """Os quatro tipos de quadra que o CSV normaliza continuam existindo no site; se um
     sumir ou for renomeado, TIPOS_QUADRA precisa acompanhar."""
-    assert set(coletor.TIPOS_QUADRA) <= set(esportes_do_site)
+    assert set(courts_collector.TIPOS_QUADRA) <= set(esportes_do_site)
 
 
 def test_seletor_ainda_encontra_quadras(quadras_do_site):
@@ -90,7 +90,7 @@ def test_pagina_ja_estabilizou_quando_a_extracao_roda(pagina_no_periodo, quadras
     pagina_no_periodo.wait_for_timeout(1_500)
     depois = [
         len(quadra["horarios"])
-        for quadra in coletor._extrair_quadras(pagina_no_periodo, ESPORTE, PERIODO)
+        for quadra in courts_collector._extrair_quadras(pagina_no_periodo, ESPORTE, PERIODO)
     ]
 
     assert antes == depois
