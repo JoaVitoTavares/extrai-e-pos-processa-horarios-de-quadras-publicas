@@ -86,3 +86,30 @@ def test_json_em_formato_inesperado_falha_explicitamente(respostas, payload):
 
     with pytest.raises(ValueError, match="formato inesperado"):
         coletor.listar_esportes()
+
+
+def test_esportes_alvo_filtra_os_tipos_de_interesse():
+    """A coleta percorre os quatro tipos de quadra que interessam ao TCC; Beach Tennis e
+    Handebol existem no site mas ficam de fora."""
+    assert coletor._esportes_alvo(ESPORTES) == [
+        "Futebol de salão", "Grama 5", "Grama 7", "Vôlei de praia"
+    ]
+
+
+def test_esportes_alvo_devolve_o_nome_como_o_site_escreve():
+    """O nome volta exatamente como veio da API, porque é ele que o clique procura na
+    tela; a comparação é que ignora acento e caixa."""
+    assert coletor._esportes_alvo(["Volei de praia", "GRAMA 7"]) == ["Volei de praia", "GRAMA 7"]
+
+
+@pytest.mark.parametrize(
+    "do_site, esperado",
+    [
+        ([], []),
+        (["Handebol", "Beach Tennis"], []),
+        (["Handebol", "Grama 5"], ["Grama 5"]),
+    ],
+)
+def test_esportes_alvo_ignora_o_que_nao_interessa(do_site, esperado):
+    """Um site sem alguns dos tipos devolve só os presentes, sem estourar."""
+    assert coletor._esportes_alvo(do_site) == esperado
