@@ -21,6 +21,7 @@ TIMEOUT_NAVEGACAO_MS = 30_000
 TIPOS_QUADRA = ["Vôlei de praia", "Futebol de salão", "Grama 7", "Grama 5"]
 SELETOR_QUADRAS = "div.bubble-rg-flex-row > div.group-item"
 SUFIXO_CSV = "-extracoes.csv"
+DIRETORIO_EXTRACOES = ".extracoes"
 COLUNAS_CSV = [
     "data", "esporte", "periodo", "horario_inicio", "horario_fim", "status",
     "valor_horario", "ultima_atualizacao", "tipo_quadra", "quadra_coberta", "clima",
@@ -339,14 +340,19 @@ def _gravar_csv(caminho_csv: str, linhas: list[dict], agora: datetime) -> None:
     df.reindex(columns=COLUNAS_CSV, fill_value="").to_csv(caminho_csv, index=False)
 
 
-def salvar_extracao(resultados: list[dict], diretorio: str = "", agora=None) -> list[str]:
-    """Distribui a extração em um CSV por quadra, criado na primeira vez que a quadra
-    aparece. É o que garante a unicidade do horário: o 17:00 de uma quadra nunca disputa
-    linha com o 17:00 de outra. Devolve os caminhos gravados."""
+def salvar_extracao(
+    resultados: list[dict], diretorio: str = DIRETORIO_EXTRACOES, agora=None
+) -> list[str]:
+    """Distribui a extração em um CSV por quadra, dentro de `diretorio`, criado junto com
+    o primeiro arquivo. É o que garante a unicidade do horário: o 17:00 de uma quadra
+    nunca disputa linha com o 17:00 de outra. Devolve os caminhos gravados."""
     agora = agora or datetime.now()
     por_quadra = {}
     for linha in _achatar_linhas(resultados, agora):
         por_quadra.setdefault(linha["quadra"], []).append(linha)
+
+    if por_quadra and diretorio:
+        os.makedirs(diretorio, exist_ok=True)
 
     caminhos = []
     for nome, linhas in por_quadra.items():
