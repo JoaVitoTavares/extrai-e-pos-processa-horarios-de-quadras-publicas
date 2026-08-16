@@ -1,9 +1,18 @@
 """Testes do gerenciador: ordem das etapas, tolerância a falha e código de saída."""
 
 import pytest
+import requests
 from playwright.sync_api import TimeoutError as PWTimeout
 
 import main
+
+
+def _que_falha(erro):
+    """Devolve uma função que levanta `erro` ao ser chamada, para os testes descreverem
+    a falha de uma etapa sem precisar de uma função nomeada por caso."""
+    def falhar(*args, **kwargs):
+        raise erro
+    return falhar
 
 
 def quadra(nome="Areia 1 - Interna", horarios=None, aviso=None):
@@ -21,6 +30,31 @@ def quadra(nome="Areia 1 - Interna", horarios=None, aviso=None):
     }
 
 
+@pytest.fixture
+def etapas(monkeypatch):
+    """Substitui as etapas do gerenciador por dublês que registram a ordem das chamadas,
+    para os testes afirmarem o encadeamento sem abrir navegador nem tocar na rede."""
+    ordem = []
+    monkeypatch.setattr(
+        main, "coletar_quadras",
+        lambda modo_visivel=False: ordem.append("quadras") or [quadra()],
+    )
+    monkeypatch.setattr(
+        main, "salvar_extracao", lambda r: ordem.append("grava") or ["um.csv"]
+    )
+    monkeypatch.setattr(main, "coletar_clima", lambda: ordem.append("clima") or "clima.csv")
+    return ordem
+
+
+def test_etapas_rodam_na_ordem(etapas):
+    """As quadras vêm antes do clima porque a coleta com navegador é a demorada: a
+    leitura de clima precisa ser a mais próxima possível do fim da execução, já que é
+    ela que o tratamento vai casar com as reservas."""
+    main.main()
+
+    assert etapas == ["quadras", "grava", "clima"]
+
+
 def test_grava_o_que_o_coletor_devolveu(monkeypatch):
     """O gerenciador passa adiante exatamente as quadras coletadas: quem coleta e quem
     grava são módulos diferentes, e é aqui que os dois se encontram."""
@@ -28,10 +62,33 @@ def test_grava_o_que_o_coletor_devolveu(monkeypatch):
     gravado = []
     monkeypatch.setattr(main, "coletar_quadras", lambda modo_visivel=False: coletado)
     monkeypatch.setattr(main, "salvar_extracao", lambda r: gravado.append(r) or ["um.csv"])
+    monkeypatch.setattr(main, "coletar_clima", lambda: "clima.csv")
 
     main.main()
 
     assert gravado == [coletado]
+
+
+def test_falha_no_clima_nao_derruba_a_execucao(monkeypatch, capsys):
+    """A Open-Meteo fora do ar não pode custar a coleta das quadras, que já está gravada:
+    o erro vai para o stderr e a execução termina normalmente."""
+    monkeypatch.setattr(main, "coletar_quadras", lambda modo_visivel=False: [quadra()])
+    monkeypatch.setattr(main, "salvar_extracao", lambda r: ["um.csv"])
+    monkeypatch.setattr(main, "coletar_clima", _que_falha(requests.ConnectionError("sem rede")))
+
+    main.main()
+
+    assert "clima não coletado" in capsys.readouterr().err
+
+
+def test_json_de_clima_invalido_tambem_e_tolerado(monkeypatch, capsys):
+    """Uma resposta malformada da API chega como ValueError, e não como erro de rede:
+    os dois caminhos precisam ser tolerados, senão a execução morre por um campo que a
+    Open-Meteo renomeou."""
+    monkeypatch.setattr(main, "coletar_clima", _que_falha(ValueError("sem o bloco 'current'")))
+
+    assert main.registrar_clima() is None
+    assert "clima não coletado" in capsys.readouterr().err
 
 
 def test_sai_com_erro_quando_nao_grava_nada(monkeypatch):
@@ -40,6 +97,7 @@ def test_sai_com_erro_quando_nao_grava_nada(monkeypatch):
     parou de crescer."""
     monkeypatch.setattr(main, "coletar_quadras", lambda modo_visivel=False: [])
     monkeypatch.setattr(main, "salvar_extracao", lambda r: [])
+    monkeypatch.setattr(main, "coletar_clima", lambda: "clima.csv")
 
     with pytest.raises(SystemExit) as saida:
         main.main()

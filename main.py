@@ -6,6 +6,7 @@ from playwright.sync_api import TimeoutError as PWTimeout
 
 from courts_collector import coletar_horarios, esportes_alvo, listar_esportes, tipos_ausentes
 from persistencia import salvar_extracao
+from weather_collector import coletar_clima
 
 
 def coletar_quadras(modo_visivel: bool = False) -> list[dict]:
@@ -30,6 +31,18 @@ def coletar_quadras(modo_visivel: bool = False) -> list[dict]:
         except PWTimeout as erro:
             print(f"[AVISO] '{esporte}' pulado por tempo esgotado: {erro}", file=sys.stderr)
     return resultados
+
+
+def registrar_clima() -> str | None:
+    """Coleta a leitura de clima e devolve o caminho gravado, ou None se a API falhar.
+    Uma queda da Open-Meteo não pode derrubar a execução: as quadras já foram gravadas,
+    e o tratamento sabe trabalhar com a última leitura que houver no histórico."""
+    print("\n>> CLIMA (API Open-Meteo): condições atuais na arena...")
+    try:
+        return coletar_clima()
+    except (requests.RequestException, ValueError) as erro:
+        print(f"[AVISO] clima não coletado: {erro}", file=sys.stderr)
+        return None
 
 
 def _imprimir_extracao(dados: dict) -> None:
@@ -57,9 +70,10 @@ def _imprimir_extracao(dados: dict) -> None:
 
 
 def main() -> None:
-    """Executa a extração ponta a ponta: coleta as quadras, imprime o que achou e grava
-    um CSV por quadra. Uma execução que não colete nada sai com erro em vez de gravar
-    silêncio — o modo de falha mais caro num coletor agendado."""
+    """Executa a extração ponta a ponta: coleta as quadras, imprime o que achou, grava um
+    CSV por quadra e registra a leitura de clima do momento. Uma execução que não colete
+    quadra nenhuma sai com erro em vez de gravar silêncio — o modo de falha mais caro
+    num coletor agendado."""
     modo_visivel = "--ver" in sys.argv
 
     resultados = coletar_quadras(modo_visivel)
@@ -67,6 +81,8 @@ def main() -> None:
         _imprimir_extracao(dados)
 
     caminhos = salvar_extracao(resultados)
+    caminho_clima = registrar_clima()
+
     if not caminhos:
         print("\n[ERRO] nenhuma quadra coletada em nenhum esporte.", file=sys.stderr)
         sys.exit(1)
@@ -74,6 +90,8 @@ def main() -> None:
     print(f"\n>> Extração salva/atualizada em {len(caminhos)} arquivo(s):")
     for caminho in caminhos:
         print(f"   {caminho}")
+    if caminho_clima:
+        print(f"\n>> Clima registrado em {caminho_clima}")
     print()
 
 

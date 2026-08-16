@@ -32,6 +32,7 @@ silêncio — o modo de falha mais caro num coletor agendado.
 | `main.py` | **Ponto de entrada.** Chama os coletores em sequência, imprime o relatório e manda gravar |
 | `config.py` | O que se edita: URL da arena, coordenadas, tipos de quadra, diretório de saída |
 | `courts_collector.py` | Coleta das reservas — API JSON e navegador. É biblioteca, não roda sozinho |
+| `weather_collector.py` | Coleta as condições atuais na arena pela API Open-Meteo |
 | `persistencia.py` | Gravação do CSV por quadra, com upsert. Não depende do Playwright |
 
 A separação não é enfeite: `persistencia.py` é importado por quem não abre navegador
@@ -55,6 +56,27 @@ de uma nunca deve disputar linha com o `17:00` de outra.
 Duas colunas saem do nome da quadra: `tipo_quadra`, normalizada para `Vôlei de praia`,
 `Futebol de salão`, `Grama 7` ou `Grama 5`; e `quadra_coberta`, `true` para
 interna/coberta e `false` para externa/descoberta.
+
+## Clima: uma tabela à parte
+
+Cada execução também registra as condições do momento na arena, pela API pública da
+[Open-Meteo](https://open-meteo.com), em `clima-leituras.csv` — um arquivo só, série
+temporal, uma linha por leitura. As coordenadas ficam no `config.py`.
+
+O `weather_code` da API é um número; a tradução para texto (`Encoberto`, `Chuva
+fraca`, `Trovoada`…) acontece **na extração**, para o histórico nascer legível. Um
+código fora do mapa grava descrição vazia, mas o número bruto fica em `codigo_clima`:
+lacuna a investigar é melhor do que clima errado.
+
+A API já devolve o horário arredondado em baldes de 15 minutos, e é esse horário que
+serve de chave — duas coletas no mesmo balde atualizam a mesma linha em vez de inchar
+o arquivo. As unidades são fixas: °C, %, mm e km/h.
+
+O sufixo do arquivo é `-leituras.csv`, e não `-extracoes.csv`, de propósito: quem varre
+as quadras por padrão de nome não pode topar com a tabela de clima no meio do caminho.
+
+Uma queda da Open-Meteo **não derruba a execução**: o aviso vai para o `stderr` e as
+quadras, que são o dado caro de coletar, seguem gravadas.
 
 ## Instalação
 ```bash

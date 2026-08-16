@@ -3,9 +3,42 @@
 import os
 
 import pytest
+import requests
 from playwright.sync_api import sync_playwright
 
 DIRETORIO_FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+
+
+class RespostaFalsa:
+    """Dublê de resposta do requests: expõe só o que os coletores consomem, que é
+    raise_for_status e json. Aqui não há motor CSS envolvido, só desserialização, então
+    o dublê cobre o contrato inteiro."""
+
+    def __init__(self, payload, erro=None):
+        self.payload = payload
+        self.erro = erro
+
+    def raise_for_status(self):
+        if self.erro:
+            raise self.erro
+
+    def json(self):
+        return self.payload
+
+
+@pytest.fixture
+def respostas(monkeypatch):
+    """Troca requests.get por um dublê e devolve a lista onde as chamadas ficam
+    registradas, para os testes checarem também como a API foi chamada. O patch é no
+    módulo requests, então serve a qualquer coletor que o importe."""
+    chamadas = []
+
+    def get_falso(url, **kwargs):
+        chamadas.append((url, kwargs))
+        return get_falso.resposta
+
+    monkeypatch.setattr(requests, "get", get_falso)
+    return chamadas, get_falso
 
 
 def carregar_html(pagina, nome_arquivo: str):

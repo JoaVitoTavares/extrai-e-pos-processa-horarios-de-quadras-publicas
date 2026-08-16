@@ -4,39 +4,9 @@ import pytest
 import requests
 
 import courts_collector
+from conftest import RespostaFalsa
 
 ESPORTES = ["Beach Tennis", "Futebol de salão", "Grama 5", "Grama 7", "Handebol", "Vôlei de praia"]
-
-
-class RespostaFalsa:
-    """Dublê de resposta do requests: expõe só o que listar_esportes consome, que é
-    raise_for_status e json. Aqui não há motor CSS envolvido, só desserialização, então
-    o dublê cobre o contrato inteiro."""
-
-    def __init__(self, payload, erro=None):
-        self.payload = payload
-        self.erro = erro
-
-    def raise_for_status(self):
-        if self.erro:
-            raise self.erro
-
-    def json(self):
-        return self.payload
-
-
-@pytest.fixture
-def respostas(monkeypatch):
-    """Troca requests.get por um dublê e devolve a lista onde as chamadas ficam
-    registradas, para os testes checarem também como a API foi chamada."""
-    chamadas = []
-
-    def get_falso(url, **kwargs):
-        chamadas.append((url, kwargs))
-        return get_falso.resposta
-
-    monkeypatch.setattr(courts_collector.requests, "get", get_falso)
-    return chamadas, get_falso
 
 
 def test_devolve_a_lista_do_json(respostas):

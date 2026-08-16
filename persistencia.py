@@ -36,6 +36,27 @@ def caminho_csv_da_quadra(nome: str, diretorio: str = "") -> str:
     return os.path.join(diretorio, slug(nome) + SUFIXO_CSV)
 
 
+def anexar_linha(caminho_csv: str, linha: dict, colunas: list[str], chave: str) -> None:
+    """Grava uma linha em CSV com upsert pela coluna `chave`: havendo registro com aquele
+    valor, ele é atualizado no lugar; senão a linha entra no fim. Serve para série
+    temporal em que a própria fonte já arredonda o instante, como a leitura de clima,
+    que repete o mesmo horário enquanto o balde de quinze minutos não vira."""
+    if os.path.exists(caminho_csv):
+        df = pd.read_csv(caminho_csv, dtype=str, keep_default_na=False)
+    else:
+        df = pd.DataFrame(columns=colunas)
+    df = df.reindex(columns=colunas, fill_value="")
+
+    existente = df[chave] == str(linha[chave])
+    if existente.any():
+        df.loc[existente, colunas] = [linha.get(coluna, "") for coluna in colunas]
+    else:
+        nova = pd.DataFrame([linha]).reindex(columns=colunas, fill_value="")
+        df = nova if df.empty else pd.concat([df, nova], ignore_index=True)
+
+    df.to_csv(caminho_csv, index=False)
+
+
 def _achatar_linhas(resultados: list[dict], agora: datetime) -> list[dict]:
     """Achata as quadras coletadas em linhas de reserva prontas para o CSV, pulando as
     que vieram com aviso, derivando horario_fim (início + 1h) e colapsando horários
