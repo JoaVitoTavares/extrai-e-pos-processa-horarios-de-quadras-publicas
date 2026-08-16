@@ -10,18 +10,21 @@ import pandas as pd
 from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
-URL_ARENA = "https://webarena.app/arena/sp-sports"
-API_INIT = "https://webarena.app/api/1.1/init/data"
+from config import (
+    API_INIT,
+    DIRETORIO_EXTRACOES,
+    PERIODOS_PADRAO,
+    TIMEOUT_NAVEGACAO_MS,
+    TIPOS_QUADRA,
+    URL_ARENA,
+)
+
 PADRAO_HORARIO = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(Livre|Indispon\w+)", re.IGNORECASE)
 PADRAO_DESCOBERTA = re.compile(r"extern|descobert", re.IGNORECASE)
 PADRAO_COBERTA = re.compile(r"intern|cobert", re.IGNORECASE)
 PADRAO_FUTSAL = re.compile(r"futsal|futebol de sal", re.IGNORECASE)
-PERIODOS_PADRAO = ["Manhã", "Tarde", "Noite"]
-TIMEOUT_NAVEGACAO_MS = 30_000
-TIPOS_QUADRA = ["Vôlei de praia", "Futebol de salão", "Grama 7", "Grama 5"]
 SELETOR_QUADRAS = "div.bubble-rg-flex-row > div.group-item"
 SUFIXO_CSV = "-extracoes.csv"
-DIRETORIO_EXTRACOES = ".extracoes"
 COLUNAS_CSV = [
     "data", "esporte", "periodo", "horario_inicio", "horario_fim", "status",
     "valor_horario", "ultima_atualizacao", "tipo_quadra", "quadra_coberta", "clima",
