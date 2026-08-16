@@ -25,7 +25,8 @@ DIRETORIO_EXTRACOES = ".extracoes"
 COLUNAS_CSV = [
     "data", "esporte", "periodo", "horario_inicio", "horario_fim", "status",
     "valor_horario", "ultima_atualizacao", "tipo_quadra", "quadra_coberta", "clima",
-    "temperatura", "umidade", "feriado", "evento_grande", "jogo_em_porto_alegre",
+    "temperatura", "umidade", "precipitacao", "velocidade_vento", "feriado",
+    "evento_grande", "jogo_em_porto_alegre",
 ]
 
 

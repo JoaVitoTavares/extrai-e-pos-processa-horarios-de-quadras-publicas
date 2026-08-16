@@ -78,3 +78,15 @@ def test_coluna_quadra_coberta_vem_logo_apos_tipo_quadra():
     """A coluna nova entra ao lado de tipo_quadra, não no fim do CSV."""
     colunas = coletor.COLUNAS_CSV
     assert colunas.index("quadra_coberta") == colunas.index("tipo_quadra") + 1
+
+
+def test_colunas_de_clima_ficam_em_bloco_contiguo():
+    """As cinco colunas que o clima preenche ficam lado a lado, antes dos marcadores de
+    contexto: quem abre o CSV lê o ambiente da reserva de uma vez, sem caçar coluna
+    perdida no meio das outras."""
+    colunas = coletor.COLUNAS_CSV
+    inicio = colunas.index("clima")
+    assert colunas[inicio:inicio + 5] == [
+        "clima", "temperatura", "umidade", "precipitacao", "velocidade_vento"
+    ]
+    assert colunas.index("feriado") == inicio + 5
