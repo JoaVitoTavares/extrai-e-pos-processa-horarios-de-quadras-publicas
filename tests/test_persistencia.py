@@ -6,7 +6,7 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
-import coletor
+import persistencia
 
 AGORA = datetime(2026, 8, 7, 8, 0, 0)
 COLUNAS_ANTIGAS = [
@@ -51,6 +51,24 @@ def quadra(nome, horarios, coberta="true", tipo="Vôlei de praia", periodo="Noit
     }
 
 
+def test_coluna_quadra_coberta_vem_logo_apos_tipo_quadra():
+    """A coluna nova entra ao lado de tipo_quadra, não no fim do CSV."""
+    colunas = persistencia.COLUNAS_CSV
+    assert colunas.index("quadra_coberta") == colunas.index("tipo_quadra") + 1
+
+
+def test_colunas_de_clima_ficam_em_bloco_contiguo():
+    """As cinco colunas que o clima preenche ficam lado a lado, antes dos marcadores de
+    contexto: quem abre o CSV lê o ambiente da reserva de uma vez, sem caçar coluna
+    perdida no meio das outras."""
+    colunas = persistencia.COLUNAS_CSV
+    inicio = colunas.index("clima")
+    assert colunas[inicio:inicio + 5] == [
+        "clima", "temperatura", "umidade", "precipitacao", "velocidade_vento"
+    ]
+    assert colunas.index("feriado") == inicio + 5
+
+
 def test_mesmo_horario_em_quadras_diferentes_vira_duas_linhas():
     """Regressão da colisão: a chave de colapso inclui a quadra, então o 17:00 da Areia
     1 e o da Areia 2 são dois registros distintos, não um sobrescrevendo o outro."""
@@ -58,7 +76,7 @@ def test_mesmo_horario_em_quadras_diferentes_vira_duas_linhas():
         quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre", "valor": 100.0}]),
         quadra("Areia 2 - Interna", [{"hora": "17:00", "status": "Indisponível"}]),
     ]
-    linhas = coletor._achatar_linhas(resultados, AGORA)
+    linhas = persistencia._achatar_linhas(resultados, AGORA)
 
     assert len(linhas) == 2
     assert {l["quadra"] for l in linhas} == {"Areia 1 - Interna", "Areia 2 - Interna"}
@@ -67,7 +85,7 @@ def test_mesmo_horario_em_quadras_diferentes_vira_duas_linhas():
 def test_linha_carrega_tipo_e_cobertura():
     """As duas colunas novas descem da quadra para a linha do CSV."""
     resultados = [quadra("Areia 4 - EXTERNA", [{"hora": "17:30", "status": "Livre"}], coberta="false")]
-    linha = coletor._achatar_linhas(resultados, AGORA)[0]
+    linha = persistencia._achatar_linhas(resultados, AGORA)[0]
 
     assert linha["tipo_quadra"] == "Vôlei de praia"
     assert linha["quadra_coberta"] == "false"
@@ -81,7 +99,7 @@ def test_horario_fim_vira_uma_hora_depois():
         {"hora": "17:00", "status": "Livre"},
         {"hora": "23:30", "status": "Livre"},
     ])]
-    fins = {l["horario_inicio"]: l["horario_fim"] for l in coletor._achatar_linhas(resultados, AGORA)}
+    fins = {l["horario_inicio"]: l["horario_fim"] for l in persistencia._achatar_linhas(resultados, AGORA)}
 
     assert fins == {"17:00": "18:00", "23:30": "00:30"}
 
@@ -91,7 +109,7 @@ def test_periodo_com_aviso_e_pulado():
     sem_dados = quadra(None, [])
     sem_dados["aviso"] = "Não foi possível coletar os horários deste período."
 
-    assert coletor._achatar_linhas([sem_dados], AGORA) == []
+    assert persistencia._achatar_linhas([sem_dados], AGORA) == []
 
 
 def test_cria_um_arquivo_por_quadra(tmp_path):
@@ -101,7 +119,7 @@ def test_cria_um_arquivo_por_quadra(tmp_path):
         quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre", "valor": 100.0}]),
         quadra("Areia 4 - EXTERNA", [{"hora": "17:30", "status": "Livre"}], coberta="false"),
     ]
-    caminhos = coletor.salvar_extracao(resultados, str(tmp_path), AGORA)
+    caminhos = persistencia.salvar_extracao(resultados, str(tmp_path), AGORA)
 
     assert sorted(os.path.basename(c) for c in caminhos) == [
         "areia-1-interna-extracoes.csv",
@@ -114,10 +132,10 @@ def test_cabecalho_e_conteudo_do_csv(tmp_path):
     """O CSV mantém as colunas de COLUNAS_CSV, com as duas novas preenchidas, e não
     vaza a coluna auxiliar `quadra`, cuja informação já está no nome do arquivo."""
     resultados = [quadra("Areia 4 - EXTERNA", [{"hora": "17:30", "status": "Livre", "valor": 120.0}], coberta="false")]
-    caminho = coletor.salvar_extracao(resultados, str(tmp_path), AGORA)[0]
+    caminho = persistencia.salvar_extracao(resultados, str(tmp_path), AGORA)[0]
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
-    assert list(df.columns) == coletor.COLUNAS_CSV
+    assert list(df.columns) == persistencia.COLUNAS_CSV
     assert "quadra" not in df.columns
     assert df.loc[0, "tipo_quadra"] == "Vôlei de praia"
     assert df.loc[0, "quadra_coberta"] == "false"
@@ -131,7 +149,7 @@ def test_quadras_diferentes_nao_colidem_no_mesmo_horario(tmp_path):
         quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre", "valor": 100.0}]),
         quadra("Areia 2 - Interna", [{"hora": "17:00", "status": "Indisponível"}]),
     ]
-    coletor.salvar_extracao(resultados, str(tmp_path), AGORA)
+    persistencia.salvar_extracao(resultados, str(tmp_path), AGORA)
 
     um = pd.read_csv(tmp_path / "areia-1-interna-extracoes.csv", dtype=str, keep_default_na=False)
     dois = pd.read_csv(tmp_path / "areia-2-interna-extracoes.csv", dtype=str, keep_default_na=False)
@@ -146,8 +164,8 @@ def test_upsert_atualiza_slot_futuro(tmp_path):
     antes = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Indisponível"}])]
     depois = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre", "valor": 100.0}])]
 
-    coletor.salvar_extracao(antes, str(tmp_path), AGORA)
-    caminho = coletor.salvar_extracao(depois, str(tmp_path), AGORA)[0]
+    persistencia.salvar_extracao(antes, str(tmp_path), AGORA)
+    caminho = persistencia.salvar_extracao(depois, str(tmp_path), AGORA)[0]
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
     assert len(df) == 1
@@ -160,8 +178,8 @@ def test_upsert_congela_slot_que_ja_passou(tmp_path):
     antes = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre", "valor": 100.0}])]
     depois = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Indisponível"}])]
 
-    coletor.salvar_extracao(antes, str(tmp_path), AGORA)
-    caminho = coletor.salvar_extracao(depois, str(tmp_path), datetime(2026, 8, 7, 18, 0, 0))[0]
+    persistencia.salvar_extracao(antes, str(tmp_path), AGORA)
+    caminho = persistencia.salvar_extracao(depois, str(tmp_path), datetime(2026, 8, 7, 18, 0, 0))[0]
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
     assert len(df) == 1
@@ -171,12 +189,12 @@ def test_upsert_congela_slot_que_ja_passou(tmp_path):
 def test_quadra_nova_nao_altera_o_arquivo_existente(tmp_path):
     """Uma quadra que aparece só na segunda coleta cria o seu arquivo sem tocar no da
     primeira."""
-    coletor.salvar_extracao(
+    persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre"}])], str(tmp_path), AGORA
     )
     antes = (tmp_path / "areia-1-interna-extracoes.csv").read_text(encoding="utf-8")
 
-    coletor.salvar_extracao(
+    persistencia.salvar_extracao(
         [quadra("Areia 9 - Nova", [{"hora": "17:00", "status": "Livre"}])], str(tmp_path), AGORA
     )
 
@@ -186,10 +204,10 @@ def test_quadra_nova_nao_altera_o_arquivo_existente(tmp_path):
 
 def test_arquivo_existente_e_estendido(tmp_path):
     """Um horário novo entra no arquivo que já existe, sem apagar o que estava lá."""
-    coletor.salvar_extracao(
+    persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre"}])], str(tmp_path), AGORA
     )
-    caminho = coletor.salvar_extracao(
+    caminho = persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "18:00", "status": "Livre"}])], str(tmp_path), AGORA
     )[0]
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
@@ -204,10 +222,10 @@ def test_csv_antigo_ganha_as_colunas_novas_ao_atualizar(tmp_path):
     caminho = tmp_path / "areia-1-interna-extracoes.csv"
     csv_antigo(caminho)
     resultados = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Indisponível"}])]
-    coletor.salvar_extracao(resultados, str(tmp_path), AGORA)
+    persistencia.salvar_extracao(resultados, str(tmp_path), AGORA)
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
-    assert list(df.columns) == coletor.COLUNAS_CSV
+    assert list(df.columns) == persistencia.COLUNAS_CSV
     assert len(df) == 1
     assert df.loc[0, "status"] == "Indisponível"
     assert df.loc[0, "precipitacao"] == ""
@@ -221,11 +239,11 @@ def test_csv_antigo_ganha_as_colunas_novas_ao_inserir(tmp_path):
     caminho = tmp_path / "areia-1-interna-extracoes.csv"
     csv_antigo(caminho)
     resultados = [quadra("Areia 1 - Interna", [{"hora": "18:00", "status": "Livre"}])]
-    coletor.salvar_extracao(resultados, str(tmp_path), AGORA)
+    persistencia.salvar_extracao(resultados, str(tmp_path), AGORA)
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
     antiga = df.set_index("horario_inicio").loc["17:00"]
 
-    assert list(df.columns) == coletor.COLUNAS_CSV
+    assert list(df.columns) == persistencia.COLUNAS_CSV
     assert len(df) == 2
     assert antiga["precipitacao"] == ""
     assert antiga["valor_horario"] == "100.0"
@@ -236,7 +254,7 @@ def test_coleta_seguinte_preserva_o_clima_ja_gravado(tmp_path):
     ultima_atualizacao, então uma coleta posterior de quadra não apaga as colunas
     ambientais que o tratamento tiver preenchido no mesmo slot."""
     resultados = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Indisponível"}])]
-    caminho = coletor.salvar_extracao(resultados, str(tmp_path), AGORA)[0]
+    caminho = persistencia.salvar_extracao(resultados, str(tmp_path), AGORA)[0]
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
     df.loc[0, ["clima", "temperatura", "umidade", "precipitacao", "velocidade_vento"]] = [
         "Encoberto", "24.4", "76", "0.0", "13.1"
@@ -244,7 +262,7 @@ def test_coleta_seguinte_preserva_o_clima_ja_gravado(tmp_path):
     df.to_csv(caminho, index=False)
 
     depois = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre", "valor": 100.0}])]
-    coletor.salvar_extracao(depois, str(tmp_path), AGORA)
+    persistencia.salvar_extracao(depois, str(tmp_path), AGORA)
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
     assert df.loc[0, "status"] == "Livre"
@@ -258,16 +276,16 @@ def test_grava_no_diretorio_de_extracoes_por_padrao(tmp_path, monkeypatch):
     do projeto."""
     monkeypatch.chdir(tmp_path)
     resultados = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre"}])]
-    coletor.salvar_extracao(resultados, agora=AGORA)
+    persistencia.salvar_extracao(resultados, agora=AGORA)
 
-    assert (tmp_path / coletor.DIRETORIO_EXTRACOES / "areia-1-interna-extracoes.csv").exists()
+    assert (tmp_path / persistencia.DIRETORIO_EXTRACOES / "areia-1-interna-extracoes.csv").exists()
 
 
 def test_cria_o_diretorio_se_nao_existir(tmp_path):
     """A primeira coleta numa máquina nova cria o diretório, em vez de estourar."""
     destino = tmp_path / "ainda-nao-existe"
     resultados = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre"}])]
-    caminhos = coletor.salvar_extracao(resultados, str(destino), AGORA)
+    caminhos = persistencia.salvar_extracao(resultados, str(destino), AGORA)
 
     assert destino.is_dir()
     assert os.path.exists(caminhos[0])
@@ -278,5 +296,5 @@ def test_extracao_so_com_aviso_nao_cria_arquivo(tmp_path):
     sem_dados = quadra(None, [])
     sem_dados["aviso"] = "Não foi possível coletar os horários deste período."
 
-    assert coletor.salvar_extracao([sem_dados], str(tmp_path), AGORA) == []
+    assert persistencia.salvar_extracao([sem_dados], str(tmp_path), AGORA) == []
     assert list(tmp_path.iterdir()) == []

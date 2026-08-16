@@ -4,24 +4,25 @@ import pytest
 
 import coletor
 import config
+import persistencia
 
 
 @pytest.mark.parametrize(
-    "nome",
+    "modulo, nome",
     [
-        "URL_ARENA",
-        "API_INIT",
-        "TIPOS_QUADRA",
-        "PERIODOS_PADRAO",
-        "TIMEOUT_NAVEGACAO_MS",
-        "DIRETORIO_EXTRACOES",
+        (coletor, "URL_ARENA"),
+        (coletor, "API_INIT"),
+        (coletor, "TIPOS_QUADRA"),
+        (coletor, "PERIODOS_PADRAO"),
+        (coletor, "TIMEOUT_NAVEGACAO_MS"),
+        (persistencia, "DIRETORIO_EXTRACOES"),
     ],
 )
-def test_coletor_reexporta_o_valor_do_config(nome):
-    """Editar o config tem que bastar: o coletor importa esses nomes em vez de manter
-    cópias próprias, e o teste falha no dia em que alguém redefinir um deles no módulo
-    do coletor e as duas versões começarem a divergir em silêncio."""
-    assert getattr(coletor, nome) is getattr(config, nome)
+def test_modulo_reexporta_o_valor_do_config(modulo, nome):
+    """Editar o config tem que bastar: cada módulo importa esses nomes em vez de manter
+    cópias próprias, e o teste falha no dia em que alguém redefinir um deles localmente
+    e as duas versões começarem a divergir em silêncio."""
+    assert getattr(modulo, nome) is getattr(config, nome)
 
 
 def test_coordenadas_sao_numeros():
