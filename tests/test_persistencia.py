@@ -172,6 +172,26 @@ def test_arquivo_existente_e_estendido(tmp_path):
     assert sorted(df["horario_inicio"]) == ["17:00", "18:00"]
 
 
+def test_grava_no_diretorio_de_extracoes_por_padrao(tmp_path, monkeypatch):
+    """Sem diretório informado, os CSVs vão para .extracoes/ em vez de sujarem a raiz
+    do projeto."""
+    monkeypatch.chdir(tmp_path)
+    resultados = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre"}])]
+    coletor.salvar_extracao(resultados, agora=AGORA)
+
+    assert (tmp_path / coletor.DIRETORIO_EXTRACOES / "areia-1-interna-extracoes.csv").exists()
+
+
+def test_cria_o_diretorio_se_nao_existir(tmp_path):
+    """A primeira coleta numa máquina nova cria o diretório, em vez de estourar."""
+    destino = tmp_path / "ainda-nao-existe"
+    resultados = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre"}])]
+    caminhos = coletor.salvar_extracao(resultados, str(destino), AGORA)
+
+    assert destino.is_dir()
+    assert os.path.exists(caminhos[0])
+
+
 def test_extracao_so_com_aviso_nao_cria_arquivo(tmp_path):
     """Sem linha nenhuma para gravar, nada é criado e a lista de caminhos volta vazia."""
     sem_dados = quadra(None, [])
