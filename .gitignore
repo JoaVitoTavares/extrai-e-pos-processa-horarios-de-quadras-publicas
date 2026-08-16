@@ -1,3 +1,5 @@
 .idea/
 .venv/
+.extracoes/
 .extrações/
+__pycache__/
