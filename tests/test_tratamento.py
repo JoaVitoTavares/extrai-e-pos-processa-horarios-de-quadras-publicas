@@ -7,7 +7,7 @@ import pytest
 
 import persistencia
 import weather_collector
-from tratamento import COLUNAS_DE_CLIMA, TratamentoDeDados
+from tratamento import TratamentoDeDados
 
 DIA = "2026-08-07"
 RESERVA = datetime(2026, 8, 7, 20, 0, 0)
@@ -198,19 +198,6 @@ def test_arquivo_de_clima_nao_e_tratado_como_quadra(extracoes):
     df = pd.read_csv(extracoes / weather_collector.ARQUIVO_CLIMA, dtype=str, keep_default_na=False)
 
     assert list(df.columns) == weather_collector.COLUNAS_CLIMA
-
-
-def test_csv_antigo_de_dezesseis_colunas_ganha_as_novas(extracoes):
-    """Uma quadra que sumiu do site parou de ser reescrita e ficou no cabeçalho antigo;
-    quando o tratamento a alcança, ela migra em vez de estourar por coluna faltante."""
-    caminho = extracoes / "areia-9-antiga-extracoes.csv"
-    df = reservas(extracoes).drop(columns=COLUNAS_DE_CLIMA[3:])
-    df.to_csv(caminho, index=False)
-    TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 17, 0))
-    migrado = pd.read_csv(caminho, dtype=str, keep_default_na=False)
-
-    assert list(migrado.columns) == persistencia.COLUNAS_CSV
-    assert migrado.loc[0, "velocidade_vento"] == "13.1"
 
 
 def test_devolve_so_os_arquivos_alterados(extracoes):

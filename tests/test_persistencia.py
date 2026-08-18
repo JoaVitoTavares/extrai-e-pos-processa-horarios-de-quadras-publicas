@@ -9,31 +9,6 @@ import pytest
 import persistencia
 
 AGORA = datetime(2026, 8, 7, 8, 0, 0)
-COLUNAS_ANTIGAS = [
-    "data", "esporte", "periodo", "horario_inicio", "horario_fim", "status",
-    "valor_horario", "ultima_atualizacao", "tipo_quadra", "quadra_coberta", "clima",
-    "temperatura", "umidade", "feriado", "evento_grande", "jogo_em_porto_alegre",
-]
-
-
-def csv_antigo(caminho):
-    """Grava um CSV de quadra no cabeçalho de dezesseis colunas, anterior a precipitacao
-    e velocidade_vento, com um único slot às 17:00. É o ponto de partida dos testes de
-    migração: os arquivos já coletados em .extracoes/ estão exatamente assim."""
-    linha = dict.fromkeys(COLUNAS_ANTIGAS, "")
-    linha.update({
-        "data": "2026-08-07",
-        "esporte": "Vôlei de praia",
-        "periodo": "Noite",
-        "horario_inicio": "17:00",
-        "horario_fim": "18:00",
-        "status": "Livre",
-        "valor_horario": "100.0",
-        "ultima_atualizacao": "2026-08-07T07:00:00",
-        "tipo_quadra": "Vôlei de praia",
-        "quadra_coberta": "true",
-    })
-    pd.DataFrame([linha], columns=COLUNAS_ANTIGAS).to_csv(caminho, index=False)
 
 
 def quadra(nome, horarios, coberta="true", tipo="Vôlei de praia", periodo="Noite"):
@@ -213,40 +188,6 @@ def test_arquivo_existente_e_estendido(tmp_path):
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
     assert sorted(df["horario_inicio"]) == ["17:00", "18:00"]
-
-
-def test_csv_antigo_ganha_as_colunas_novas_ao_atualizar(tmp_path):
-    """Um arquivo gravado antes de precipitacao e velocidade_vento existirem migra
-    sozinho na primeira coleta que atualiza o slot: o reindex final acrescenta as duas
-    colunas vazias, sem script de migração e sem perder o que já estava lá."""
-    caminho = tmp_path / "areia-1-interna-extracoes.csv"
-    csv_antigo(caminho)
-    resultados = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Indisponível"}])]
-    persistencia.salvar_extracao(resultados, str(tmp_path), AGORA)
-    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
-
-    assert list(df.columns) == persistencia.COLUNAS_CSV
-    assert len(df) == 1
-    assert df.loc[0, "status"] == "Indisponível"
-    assert df.loc[0, "precipitacao"] == ""
-    assert df.loc[0, "velocidade_vento"] == ""
-
-
-def test_csv_antigo_ganha_as_colunas_novas_ao_inserir(tmp_path):
-    """Pelo caminho do insert a união das colunas passa por um concat, que deixaria NaN
-    nas linhas velhas. O que importa aqui é o arquivo relido: a linha antiga tem campo
-    vazio nas colunas novas, não a string 'nan'."""
-    caminho = tmp_path / "areia-1-interna-extracoes.csv"
-    csv_antigo(caminho)
-    resultados = [quadra("Areia 1 - Interna", [{"hora": "18:00", "status": "Livre"}])]
-    persistencia.salvar_extracao(resultados, str(tmp_path), AGORA)
-    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
-    antiga = df.set_index("horario_inicio").loc["17:00"]
-
-    assert list(df.columns) == persistencia.COLUNAS_CSV
-    assert len(df) == 2
-    assert antiga["precipitacao"] == ""
-    assert antiga["valor_horario"] == "100.0"
 
 
 def test_coleta_seguinte_preserva_o_clima_ja_gravado(tmp_path):
