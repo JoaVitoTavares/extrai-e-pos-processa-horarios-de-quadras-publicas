@@ -33,6 +33,7 @@ silêncio — o modo de falha mais caro num coletor agendado.
 | `config.py` | O que se edita: URL da arena, coordenadas, tipos de quadra, diretório de saída |
 | `courts_collector.py` | Coleta das reservas — API JSON e navegador. É biblioteca, não roda sozinho |
 | `weather_collector.py` | Coleta as condições atuais na arena pela API Open-Meteo |
+| `tratamento.py` | Casa a leitura de clima com as reservas que estão na janela |
 | `persistencia.py` | Gravação do CSV por quadra, com upsert. Não depende do Playwright |
 
 A separação não é enfeite: `persistencia.py` é importado por quem não abre navegador
@@ -77,6 +78,37 @@ as quadras por padrão de nome não pode topar com a tabela de clima no meio do 
 
 Uma queda da Open-Meteo **não derruba a execução**: o aviso vai para o `stderr` e as
 quadras, que são o dado caro de coletar, seguem gravadas.
+
+## A janela de clima de cada reserva
+
+Depois das duas coletas, o `tratamento.py` escreve `clima`, `temperatura`, `umidade`,
+`precipitacao` e `velocidade_vento` nas reservas — mas só nas que estão na **janela**:
+de 4 horas antes até 1 hora antes do horário reservado, com as duas pontas incluídas.
+
+Para uma reserva das 20:00, com coleta a cada 15 minutos:
+
+```
+15:00  (-5h)     não escreve — a observação envelheceria até o jogo
+16:00  (-4h)     escreve            <- primeira
+17:30  (-2h30)   sobrescreve
+19:00  (-1h)     sobrescreve        <- última, é a que fica
+19:30  (-30min)  não escreve
+20:00            não escreve — o registro já está congelado
+```
+
+Cada rodada dentro da janela vale mais que a anterior, então **o que fica gravado é a
+observação de uma hora antes da reserva** — a mais próxima do jogo. Fora da janela as
+colunas ficam vazias, e vazio aqui quer dizer "não houve observação nessa janela", não
+"choveu zero". Os limites são editáveis em `config.py`.
+
+Duas recusas deliberadas: leitura de clima **futura** é ignorada (indica relógio
+desalinhado, não previsão), e leitura **velha demais** também
+(`TOLERANCIA_LEITURA_CLIMA_MIN`) — carimbar numa reserva o clima de três horas atrás é
+pior do que deixar a lacuna.
+
+> A comparação de horários usa o relógio da máquina, e a API responde no fuso de
+> `config.FUSO_HORARIO`. Numa VPS em UTC a janela erra por 3 horas em silêncio: mantenha
+> o servidor em `America/Sao_Paulo`.
 
 ## Instalação
 ```bash

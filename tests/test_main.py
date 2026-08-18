@@ -30,11 +30,30 @@ def quadra(nome="Areia 1 - Interna", horarios=None, aviso=None):
     }
 
 
+@pytest.fixture(autouse=True)
+def tratamento_dublado(monkeypatch):
+    """Dubla o tratamento em todo teste deste arquivo e devolve a lista onde as chamadas
+    ficam registradas. É autouse de propósito: o tratamento de verdade varre o diretório
+    de extrações real, e um teste distraído reescreveria os CSVs da máquina."""
+    chamadas = []
+
+    class TratamentoFalso:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def aplicar(self, agora=None):
+            chamadas.append("trata")
+            return ["um.csv"]
+
+    monkeypatch.setattr(main, "TratamentoDeDados", TratamentoFalso)
+    return chamadas
+
+
 @pytest.fixture
-def etapas(monkeypatch):
+def etapas(monkeypatch, tratamento_dublado):
     """Substitui as etapas do gerenciador por dublês que registram a ordem das chamadas,
     para os testes afirmarem o encadeamento sem abrir navegador nem tocar na rede."""
-    ordem = []
+    ordem = tratamento_dublado
     monkeypatch.setattr(
         main, "coletar_quadras",
         lambda modo_visivel=False: ordem.append("quadras") or [quadra()],
@@ -47,12 +66,11 @@ def etapas(monkeypatch):
 
 
 def test_etapas_rodam_na_ordem(etapas):
-    """As quadras vêm antes do clima porque a coleta com navegador é a demorada: a
-    leitura de clima precisa ser a mais próxima possível do fim da execução, já que é
-    ela que o tratamento vai casar com as reservas."""
+    """O tratamento é o último porque depende das duas coletas: precisa das reservas já
+    gravadas e da leitura de clima mais recente para casar uma com a outra."""
     main.main()
 
-    assert etapas == ["quadras", "grava", "clima"]
+    assert etapas == ["quadras", "grava", "clima", "trata"]
 
 
 def test_grava_o_que_o_coletor_devolveu(monkeypatch):

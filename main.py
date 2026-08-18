@@ -6,6 +6,7 @@ from playwright.sync_api import TimeoutError as PWTimeout
 
 from courts_collector import coletar_horarios, esportes_alvo, listar_esportes, tipos_ausentes
 from persistencia import salvar_extracao
+from tratamento import TratamentoDeDados
 from weather_collector import coletar_clima
 
 
@@ -71,9 +72,9 @@ def _imprimir_extracao(dados: dict) -> None:
 
 def main() -> None:
     """Executa a extração ponta a ponta: coleta as quadras, imprime o que achou, grava um
-    CSV por quadra e registra a leitura de clima do momento. Uma execução que não colete
-    quadra nenhuma sai com erro em vez de gravar silêncio — o modo de falha mais caro
-    num coletor agendado."""
+    CSV por quadra, registra a leitura de clima do momento e a aplica nas reservas que
+    estão na janela. Uma execução que não colete quadra nenhuma sai com erro em vez de
+    gravar silêncio — o modo de falha mais caro num coletor agendado."""
     modo_visivel = "--ver" in sys.argv
 
     resultados = coletar_quadras(modo_visivel)
@@ -82,6 +83,7 @@ def main() -> None:
 
     caminhos = salvar_extracao(resultados)
     caminho_clima = registrar_clima()
+    enriquecidos = TratamentoDeDados().aplicar()
 
     if not caminhos:
         print("\n[ERRO] nenhuma quadra coletada em nenhum esporte.", file=sys.stderr)
@@ -92,6 +94,7 @@ def main() -> None:
         print(f"   {caminho}")
     if caminho_clima:
         print(f"\n>> Clima registrado em {caminho_clima}")
+    print(f">> Clima aplicado em {len(enriquecidos)} arquivo(s) de quadra.")
     print()
 
 
