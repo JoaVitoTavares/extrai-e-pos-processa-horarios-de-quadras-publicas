@@ -55,10 +55,6 @@ def coletar_quadras(arena: dict, modo_visivel: bool = False) -> list[dict]:
 
 
 def registrar_local(arena: dict, resultados: list[dict]) -> dict | None:
-    """Descobre em que ponto do mapa a arena fica, a partir do endereço que as quadras
-    trouxeram, e devolve o local ou None quando não há como saber. A falha do
-    geocodificador é tratada como a da Open-Meteo: as quadras já estão coletadas, e o que
-    se perde é o clima desta arena até a próxima rodada."""
     print(f"\n>> LOCAL (Nominatim): onde fica a {arena['nome']}...")
     try:
         local = resolver_local(
@@ -76,10 +72,6 @@ def registrar_local(arena: dict, resultados: list[dict]) -> dict | None:
 
 
 def registrar_clima(local: dict, diretorio: str) -> str | None:
-    """Coleta a leitura de clima nas coordenadas da arena e devolve o caminho gravado, ou
-    None se a API falhar. Uma queda da Open-Meteo não pode derrubar a execução: as quadras
-    já foram gravadas, e o tratamento sabe trabalhar com a última leitura que houver no
-    histórico."""
     print("\n>> CLIMA (API Open-Meteo): condições atuais na arena...")
     try:
         caminho = coletar_clima(local["latitude"], local["longitude"], diretorio)
@@ -91,10 +83,6 @@ def registrar_clima(local: dict, diretorio: str) -> str | None:
 
 
 def registrar_previsao(local: dict, diretorio: str) -> str | None:
-    """Coleta a previsão hora a hora dos dias que a extração percorre e devolve o caminho
-    gravado, ou None se a API falhar. Vale a mesma tolerância da leitura atual: sem a
-    previsão desta rodada, a reserva detectada agora fica com a coluna vazia e a próxima
-    rodada a preenche, o que custa menos do que derrubar a execução."""
     print("\n>> PREVISÃO (API Open-Meteo): horas à frente na arena...")
     try:
         caminho = coletar_previsao(local["latitude"], local["longitude"], diretorio)
@@ -106,9 +94,6 @@ def registrar_previsao(local: dict, diretorio: str) -> str | None:
 
 
 def _imprimir_extracao(dados: dict) -> None:
-    """Imprime o bloco de uma quadra num período: cabeçalho com esporte e cobertura,
-    um horário por linha com 🟢 para livre e 🔴 para indisponível, e o resumo de vagas.
-    Um período que não carregou mostra só o aviso, já que não há horário para listar."""
     print("\n" + "=" * 46)
     print(f"  {dados['esporte']}  |  {dados['data']}  |  Período: {dados['periodo']}")
     if dados["quadra"]:
@@ -132,9 +117,6 @@ def _imprimir_extracao(dados: dict) -> None:
 
 
 def _imprimir_resumo(arena: dict, caminhos: list[str], enriquecidos: list[str]) -> None:
-    """Fecha o bloco da arena com os arquivos de quadra gravados e quantos o tratamento
-    tocou. Os caminhos saem um por linha porque é por eles que se confere, no log da
-    rodada agendada, que uma arena nova está mesmo gravando na pasta dela."""
     print(f"\n>> {arena['nome']}: extração salva/atualizada em {len(caminhos)} arquivo(s):")
     for caminho in caminhos:
         print(f"   {caminho}")

@@ -30,15 +30,11 @@ STATUS_LIVRE = "livre"
 
 
 def sem_acento(texto: str) -> str:
-    """Devolve o texto sem sinais diacríticos, para comparar e montar nomes de arquivo
-    sem depender de o site escrever 'Vôlei' ou 'Volei'."""
     decomposto = unicodedata.normalize("NFKD", texto)
     return "".join(c for c in decomposto if not unicodedata.combining(c))
 
 
 def slug(nome: str) -> str:
-    """Converte o nome de uma quadra em identificador de arquivo: minúsculo, sem acento
-    e com qualquer sequência de pontuação ou espaço virando um hífen só."""
     return re.sub(r"[^a-z0-9]+", "-", sem_acento(nome).lower()).strip("-")
 
 
@@ -53,8 +49,6 @@ def periodo_do_dia(momento: datetime) -> str:
 
 
 def caminho_csv_da_quadra(nome: str, diretorio: str = "") -> str:
-    """Monta o caminho do CSV daquela quadra, já que cada quadra tem o seu: assim o
-    horário de uma nunca disputa linha com o horário de outra."""
     return os.path.join(diretorio, slug(nome) + SUFIXO_CSV)
 
 

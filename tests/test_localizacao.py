@@ -23,29 +23,20 @@ ACHADO = {
 
 @pytest.fixture(autouse=True)
 def sem_espera(monkeypatch):
-    """Zera a pausa entre as tentativas de consulta. A pausa existe para respeitar o
-    limite de uma chamada por segundo do serviço público, e num teste com o requests
-    dublado ela só faria a suíte esperar por nada."""
     monkeypatch.setattr(localizacao.time, "sleep", lambda segundos: None)
 
 
 def quadra(endereco):
-    """Monta o mínimo de uma quadra coletada para os testes de endereço observado: só o
-    campo que o coletor traz da tela."""
     return {"quadra": "Areia 1", "endereco": endereco}
 
 
 def test_endereco_observado_fica_com_o_mais_repetido():
-    """O site mostra o endereço uma vez por esporte, então a rodada traz várias cópias
-    do mesmo texto. A leitura que falhou vem vazia e não pode votar."""
     resultados = [quadra(ENDERECO), quadra(""), quadra(ENDERECO), quadra("Outro 1, Canoas")]
 
     assert localizacao.endereco_observado(resultados) == ENDERECO
 
 
 def test_endereco_observado_sem_nenhuma_leitura():
-    """Nenhuma quadra com endereço devolve vazio, que é como a rodada diz que não sabe
-    onde a arena fica — e não que ela mudou de lugar."""
     assert localizacao.endereco_observado([quadra(""), {"quadra": "Areia 2"}]) == ""
 
 
@@ -59,10 +50,6 @@ def test_endereco_observado_sem_nenhuma_leitura():
     ],
 )
 def test_variacoes_descem_do_especifico_para_o_generico(endereco, esperado):
-    """As formas de perguntar vão da mais específica à mais genérica: como veio, sem o
-    número do prédio e só a cidade. Para o clima a cidade já basta — a grade da Open-Meteo
-    tem quilômetros de lado —, então descer um degrau vale mais do que devolver nada
-    porque o número não está no mapa."""
     assert localizacao.variacoes_da_consulta(endereco) == esperado
 
 
@@ -83,8 +70,6 @@ def test_consulta_identifica_a_aplicacao_e_filtra_o_pais(respostas):
 
 
 def test_geocodifica_endereco_em_coordenadas_e_cidade(respostas):
-    """O endereço vira latitude, longitude e cidade. A cidade sai do endereço estruturado
-    que o serviço devolve — `town` para Parobé —, e não de um pedaço do texto livre."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([ACHADO])
     local = localizacao.geocodificar(ENDERECO)
@@ -95,8 +80,6 @@ def test_geocodifica_endereco_em_coordenadas_e_cidade(respostas):
 
 
 def test_desce_para_a_consulta_seguinte_quando_nao_ha_resultado(monkeypatch):
-    """Endereço que o mapa não conhece com o número do prédio é perguntado de novo sem
-    ele, e depois só pela cidade. É a diferença entre a arena ter clima e não ter."""
     consultas = []
 
     def get_falso(url, **kwargs):
@@ -111,8 +94,6 @@ def test_desce_para_a_consulta_seguinte_quando_nao_ha_resultado(monkeypatch):
 
 
 def test_endereco_que_nenhuma_consulta_resolve_devolve_none(respostas):
-    """Esgotadas as variações, o resultado é None: sem coordenada confiável é melhor a
-    arena passar a rodada sem clima do que consultar a Open-Meteo no lugar errado."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([])
 
@@ -130,8 +111,6 @@ def test_resposta_sem_coordenada_falha_alto(respostas):
 
 
 def test_erro_http_sobe(respostas):
-    """Um 500 do Nominatim não é engolido aqui: quem chamou decide o que fazer, e o
-    gerenciador transforma isso em aviso no stderr."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([ACHADO], erro=requests.HTTPError("500"))
 
@@ -140,8 +119,6 @@ def test_erro_http_sobe(respostas):
 
 
 def test_resolver_grava_o_local_no_diretorio_da_arena(respostas, tmp_path):
-    """O local resolvido fica em local.json, ao lado das extrações daquela arena: é a
-    memória do geocodificador e o registro de onde o clima daquela pasta foi medido."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([ACHADO])
     localizacao.resolver_local(ENDERECO, str(tmp_path))
@@ -191,8 +168,6 @@ def test_endereco_novo_que_o_mapa_recusa_nao_herda_o_antigo(respostas, tmp_path)
 
 
 def test_coordenadas_do_config_dispensam_o_geocodificador(respostas, tmp_path):
-    """Coordenadas fixadas à mão vencem tudo: são a saída para o endereço que o mapa não
-    reconhece, e não faria sentido consultar o serviço para depois descartar a resposta."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([ACHADO])
     local = localizacao.resolver_local(ENDERECO, str(tmp_path), coordenadas=(-29.65, -50.81))
@@ -203,15 +178,10 @@ def test_coordenadas_do_config_dispensam_o_geocodificador(respostas, tmp_path):
 
 
 def test_sem_endereco_e_sem_cache_devolve_none(tmp_path):
-    """Arena nova cujo endereço não foi lido não tem como ser localizada, e a rodada
-    segue sem clima em vez de estourar."""
     assert localizacao.resolver_local("", str(tmp_path)) is None
 
 
 def test_local_corrompido_conta_como_cache_vazio(respostas, tmp_path):
-    """Um local.json truncado por queda de energia não pode derrubar a rodada nem
-    devolver coordenada pela metade: vale como se não houvesse cache, e a consulta é
-    refeita."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([ACHADO])
     (tmp_path / localizacao.ARQUIVO_LOCAL).write_text('{"endereco": "20 de J', encoding="utf-8")

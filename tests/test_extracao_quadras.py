@@ -31,39 +31,29 @@ HORARIOS_ESPERADOS = {
 
 @pytest.fixture
 def quadras_volei(carregar_fixture):
-    """Extrai as quatro quadras de vôlei da fixture, ponto de partida da maior parte
-    dos testes deste arquivo."""
     pagina = carregar_fixture("quatro_quadras_volei.html")
     return courts_collector._extrair_quadras(pagina, "Vôlei de praia", "Noite", DIA)
 
 
 def test_uma_entrada_por_quadra(quadras_volei):
-    """O RepeatingGroup externo tem uma quadra por group-item, então quatro quadras
-    viram quatro itens — e não um amontoado só."""
     assert len(quadras_volei) == 4
 
 
 def test_nomes_das_quadras_na_ordem_da_tela(quadras_volei):
-    """O nome de cada quadra sai da primeira linha do seu bloco, preservando a ordem em
-    que a tela lista as quadras."""
     nomes = [q["quadra"] for q in quadras_volei]
     assert nomes == ["Areia 1 - Interna", "Areia 2 - Interna", "Areia 3 - Interna", "Areia 4 - EXTERNA"]
 
 
 def test_cobertura_classificada_por_quadra(quadras_volei):
-    """As três primeiras areias são internas e a quarta é externa, então a cobertura
-    varia dentro do mesmo esporte."""
     assert [q["quadra_coberta"] for q in quadras_volei] == ["true", "true", "true", "false"]
 
 
 def test_tipo_quadra_vem_do_esporte_selecionado(quadras_volei):
-    """Todas as quadras do vôlei recebem o mesmo tipo, canonizado a partir do esporte."""
     assert {q["tipo_quadra"] for q in quadras_volei} == {"Vôlei de praia"}
 
 
 @pytest.mark.parametrize("nome", list(HORARIOS_ESPERADOS))
 def test_horarios_de_cada_quadra(quadras_volei, nome):
-    """Cada quadra carrega exatamente os horários e status do seu próprio bloco."""
     quadra = next(q for q in quadras_volei if q["quadra"] == nome)
     obtidos = [(h["hora"], h["status"]) for h in quadra["horarios"]]
     assert obtidos == HORARIOS_ESPERADOS[nome]
@@ -88,8 +78,6 @@ def test_horarios_nao_vazam_entre_quadras(quadras_volei):
 
 
 def test_metadados_do_periodo_em_cada_quadra(quadras_volei):
-    """Esporte, período, dia e horário da coleta acompanham cada quadra, porque a linha
-    do CSV é montada a partir do item da quadra, não do período."""
     for quadra in quadras_volei:
         assert quadra["esporte"] == "Vôlei de praia"
         assert quadra["periodo"] == "Noite"
@@ -117,7 +105,6 @@ def test_raiz_da_quadra_permite_escopar_o_clique(quadras_volei):
 
 
 def test_quadra_unica_continua_funcionando(carregar_fixture):
-    """O caso de um esporte com uma quadra só — como o futsal de hoje — não regride."""
     pagina = carregar_fixture("quadra_unica_grama7.html")
     quadras = courts_collector._extrair_quadras(pagina, "Grama 7", "Noite", DIA)
 
@@ -130,8 +117,6 @@ def test_quadra_unica_continua_funcionando(carregar_fixture):
 
 
 def test_pagina_sem_quadras_devolve_aviso(pagina):
-    """Sem nenhum bloco de quadra na tela, o período vira um item único com aviso — o
-    mesmo comportamento de hoje para período que não carregou."""
     pagina.set_content("<div></div>")
     quadras = courts_collector._extrair_quadras(pagina, "Futebol de salão", "Manhã", DIA)
 

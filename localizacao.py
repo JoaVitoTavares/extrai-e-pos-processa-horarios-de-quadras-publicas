@@ -45,10 +45,6 @@ def variacoes_da_consulta(endereco: str) -> list[str]:
 
 
 def consultar_geocodificacao(consulta: str, timeout: int = 30) -> dict | None:
-    """Pergunta ao Nominatim, o geocodificador do OpenStreetMap, onde fica um endereço, e
-    devolve o primeiro resultado ou None quando não há nenhum. O User-Agent que identifica
-    a aplicação é exigência do serviço, que recusa chamada anônima; o país entra como
-    filtro porque o site escreve rua e cidade, sem nada que situe o endereço no mundo."""
     resposta = requests.get(
         API_GEOCODIFICACAO,
         params={
@@ -68,10 +64,6 @@ def consultar_geocodificacao(consulta: str, timeout: int = 30) -> dict | None:
 
 
 def _cidade(achado: dict) -> str:
-    """Lê a cidade no endereço estruturado que o geocodificador devolve, testando os
-    campos na ordem em que o OpenStreetMap costuma preenchê-los — `city` para Canoas,
-    `town` para Parobé. Sem nenhum deles devolve vazio, em vez de deduzir a cidade do
-    texto livre, que é justamente o que o campo estruturado existe para evitar."""
     endereco = achado.get("address") or {}
     for campo in CAMPOS_DE_CIDADE:
         if endereco.get(campo):
@@ -80,9 +72,8 @@ def _cidade(achado: dict) -> str:
 
 
 def geocodificar(endereco: str) -> dict | None:
-    """Traduz o endereço da arena em latitude, longitude e cidade, tentando as variações
-    da consulta até uma responder e respeitando o limite de uma chamada por segundo do
-    serviço público. Devolve None quando nenhuma responde: sem coordenada confiável é
+    """Tenta as variações da consulta até uma responder, com a pausa que o serviço público
+    exige entre chamadas. Nenhuma respondendo, devolve None: sem coordenada confiável é
     melhor ficar sem clima nesta rodada do que consultar a Open-Meteo no lugar errado."""
     for indice, consulta in enumerate(variacoes_da_consulta(endereco)):
         if indice:
@@ -106,10 +97,6 @@ def geocodificar(endereco: str) -> dict | None:
 
 
 def local_gravado(diretorio: str) -> dict | None:
-    """Lê o local que já foi resolvido para a arena, guardado junto das extrações dela. É
-    este arquivo que evita repetir a mesma pergunta ao geocodificador a cada quinze
-    minutos: o endereço de uma quadra não muda, e o serviço é público, gratuito e limitado
-    a uma consulta por segundo. Arquivo ausente ou corrompido conta como cache vazio."""
     caminho = os.path.join(diretorio, ARQUIVO_LOCAL)
     if not os.path.exists(caminho):
         return None
@@ -122,9 +109,6 @@ def local_gravado(diretorio: str) -> dict | None:
 
 
 def salvar_local(local: dict, diretorio: str, agora=None) -> str:
-    """Grava em local.json o ponto do mapa que a arena ocupa, com o instante em que foi
-    resolvido. O arquivo é a memória do geocodificador e também o registro de onde o clima
-    daquela pasta foi medido. Devolve o caminho gravado."""
     agora = agora or datetime.now()
     os.makedirs(diretorio, exist_ok=True)
     caminho = os.path.join(diretorio, ARQUIVO_LOCAL)

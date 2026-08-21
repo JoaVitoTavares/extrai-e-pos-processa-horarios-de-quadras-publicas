@@ -17,8 +17,6 @@ def test_le_o_endereco_entre_o_esporte_e_a_data(carregar_fixture):
 
 
 def test_ignora_o_que_esta_acima_do_esporte(carregar_fixture):
-    """A barra de topo também tem vírgula, e vem antes na tela: a leitura começa depois
-    do nome do esporte, senão a saudação ao visitante viraria o endereço da arena."""
     pagina = carregar_fixture("cabecalho_com_endereco.html")
 
     assert "visitante" not in courts_collector.extrair_endereco(pagina, ESPORTE)
@@ -45,9 +43,6 @@ def test_sem_o_esporte_na_tela_nao_chuta_endereco(carregar_fixture):
 
 
 def test_pagina_sem_campo_de_data_devolve_vazio(pagina):
-    """A página que nem chegou a montar o bloco de reserva não tem endereço para ler, e a
-    espera não pode segurar a coleta: passado o tempo, devolve vazio e a arena segue com
-    o local que já conhecia."""
     pagina.set_content("<div>Escolha uma opção de esporte</div>")
 
     assert courts_collector.extrair_endereco(pagina, ESPORTE, timeout_ms=200) == ""

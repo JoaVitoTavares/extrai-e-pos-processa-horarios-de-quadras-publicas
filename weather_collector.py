@@ -53,10 +53,6 @@ CODIGOS_CLIMA = {
 
 
 def descrever_codigo(codigo) -> str:
-    """Traduz o weather_code da Open-Meteo para o texto em português que vai ao CSV. Um
-    código fora do mapa devolve vazio em vez de um rótulo inventado: o número bruto
-    continua gravado em codigo_clima, então nada se perde e um código novo da API
-    aparece como lacuna a investigar, não como clima errado."""
     try:
         return CODIGOS_CLIMA[int(codigo)]
     except (KeyError, TypeError, ValueError):
@@ -64,12 +60,6 @@ def descrever_codigo(codigo) -> str:
 
 
 def consultar_clima(latitude: float, longitude: float, timeout: int = 30) -> dict:
-    """Busca as condições atuais no ponto pedido e devolve o bloco `current` do JSON. As
-    coordenadas são obrigatórias porque cada arena tem as suas, tiradas do endereço que
-    ela publica: um padrão aqui carimbaria em todas o clima de uma cidade só. Resposta
-    sem o bloco levanta ValueError em vez de estourar KeyError cru ou devolver dicionário
-    vazio — num coletor agendado, gravar nada em silêncio custa mais caro do que falhar
-    alto."""
     resposta = requests.get(
         API_CLIMA,
         params={
@@ -89,10 +79,6 @@ def consultar_clima(latitude: float, longitude: float, timeout: int = 30) -> dic
 
 
 def _linha_de_clima(atual: dict, agora: datetime, latitude: float, longitude: float) -> dict:
-    """Converte o bloco `current` da API na linha do CSV de clima, já com o weather_code
-    traduzido — a tradução acontece na extração para o histórico nascer legível e o
-    tratamento não precisar do mapa. O horário vem da API, que o arredonda no balde de
-    quinze minutos; `coletado_em` guarda quando a chamada foi feita."""
     return {
         "data_hora": atual.get("time", ""),
         "coletado_em": agora.isoformat(timespec="seconds"),
@@ -116,11 +102,6 @@ def salvar_leitura(
     diretorio: str = DIRETORIO_EXTRACOES,
     agora=None,
 ) -> str:
-    """Grava a leitura no CSV único de clima dentro de `diretorio`, que é o da arena, com
-    upsert por data_hora: duas coletas caindo no mesmo balde de quinze minutos atualizam a
-    mesma linha em vez de duplicá-la. As coordenadas vão na linha para o histórico dizer
-    de onde a medição veio, mesmo depois que a arena mudar de endereço. Devolve o caminho
-    gravado."""
     agora = agora or datetime.now()
     if diretorio:
         os.makedirs(diretorio, exist_ok=True)
@@ -133,10 +114,9 @@ def salvar_leitura(
 def coletar_clima(
     latitude: float, longitude: float, diretorio: str = DIRETORIO_EXTRACOES, agora=None
 ) -> str:
-    """Consulta a API no ponto da arena e grava a leitura, devolvendo o caminho do CSV de
-    clima. É a fachada que o gerenciador chama: quem orquestra não precisa saber que
-    existem duas etapas nem qual delas falhou."""
-    return salvar_leitura(consultar_clima(latitude, longitude), latitude, longitude, diretorio, agora)
+    return salvar_leitura(
+        consultar_clima(latitude, longitude), latitude, longitude, diretorio, agora
+    )
 
 
 def consultar_previsao(
@@ -145,10 +125,6 @@ def consultar_previsao(
     dias_a_frente: int = DIAS_A_FRENTE,
     timeout: int = 30,
 ) -> dict:
-    """Busca a previsão hora a hora para os dias que a coleta de quadras percorre e
-    devolve o bloco `hourly` do JSON. O horizonte acompanha DIAS_A_FRENTE: uma reserva só
-    é vista nascer dentro da janela que o coletor visita, e é para essas que faz sentido
-    haver previsão. Resposta sem o bloco levanta ValueError, como em consultar_clima."""
     resposta = requests.get(
         API_CLIMA,
         params={
@@ -173,7 +149,6 @@ def _linhas_de_previsao(horas: dict, agora: datetime, latitude: float, longitude
     hora prevista, com o weather_code já traduzido. Um campo que a API deixe de devolver
     vira coluna vazia, em vez de derrubar a transposição inteira."""
     def valor(campo: str, indice: int):
-        """Lê o campo na hora pedida, devolvendo vazio quando a lista não vem ou é curta."""
         valores = horas.get(campo) or []
         return valores[indice] if indice < len(valores) else ""
 
@@ -220,9 +195,6 @@ def salvar_previsao(
 def coletar_previsao(
     latitude: float, longitude: float, diretorio: str = DIRETORIO_EXTRACOES, agora=None
 ) -> str:
-    """Consulta a previsão do ponto da arena e grava a tabela, devolvendo o caminho do
-    CSV. É a fachada irmã de coletar_clima: uma responde o que está acontecendo agora, a
-    outra o que se espera para os horários que ainda podem ser reservados."""
     return salvar_previsao(
         consultar_previsao(latitude, longitude), latitude, longitude, diretorio, agora
     )

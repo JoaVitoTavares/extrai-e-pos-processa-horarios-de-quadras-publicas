@@ -22,15 +22,10 @@ import persistencia
     ],
 )
 def test_modulo_reexporta_o_valor_do_config(modulo, nome):
-    """Editar o config tem que bastar: cada módulo importa esses nomes em vez de manter
-    cópias próprias, e o teste falha no dia em que alguém redefinir um deles localmente
-    e as duas versões começarem a divergir em silêncio."""
     assert getattr(modulo, nome) is getattr(config, nome)
 
 
 def test_toda_arena_tem_url():
-    """A URL é a única coisa que uma arena não pode deixar de declarar: é dela que saem a
-    API JSON, a página que o navegador abre e o diretório onde ela grava."""
     assert config.ARENAS
     for arena in config.ARENAS:
         assert arena["url"].startswith("http")
@@ -45,6 +40,4 @@ def test_arenas_nao_repetem_o_diretorio():
 
 
 def test_janela_do_clima_e_um_intervalo_valido():
-    """A coleta começa antes de terminar: horas_antes maior que horas_ate, senão a
-    janela do tratamento nasce vazia e nenhuma reserva receberia clima."""
     assert config.HORAS_ANTES_DA_RESERVA > config.HORAS_ATE_A_RESERVA > 0

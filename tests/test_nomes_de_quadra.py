@@ -19,18 +19,14 @@ import persistencia
     ],
 )
 def test_slug_normaliza_nome_da_quadra(nome, esperado):
-    """O slug vira minúsculo, perde acento e colapsa qualquer pontuação ou espaço em
-    hífens únicos, sem sobrar hífen nas pontas."""
     assert persistencia.slug(nome) == esperado
 
 
 def test_caminho_csv_usa_o_slug_e_o_sufixo():
-    """Cada quadra tem seu próprio arquivo, nomeado a partir do slug."""
     assert persistencia.caminho_csv_da_quadra("Areia 4 - EXTERNA") == "areia-4-externa-extracoes.csv"
 
 
 def test_caminho_csv_respeita_o_diretorio():
-    """Com diretório informado, o caminho é montado por os.path.join."""
     caminho = persistencia.caminho_csv_da_quadra("FUTSAL - Interna", "/tmp/extracoes")
     assert caminho == os.path.join("/tmp/extracoes", "futsal-interna-extracoes.csv")
 
@@ -69,7 +65,4 @@ def test_quadra_coberta_classifica_pelo_nome(nome, esperado):
     ],
 )
 def test_tipo_quadra_canoniza_o_esporte(esporte, nome, esperado):
-    """O tipo sai do esporte selecionado, canonizado para os quatro tipos de interesse
-    mesmo sem acento; futsal no nome da quadra resolve o caso em que o esporte não é
-    reconhecido, e um esporte fora da lista é devolvido como veio, sem perder dado."""
     assert courts_collector._tipo_quadra(esporte, nome) == esperado
