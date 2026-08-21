@@ -5,14 +5,7 @@ import pandas as pd
 import requests
 from datetime import datetime
 
-from config import (
-    API_CLIMA,
-    DIAS_A_FRENTE,
-    DIRETORIO_EXTRACOES,
-    FUSO_HORARIO,
-    LATITUDE,
-    LONGITUDE,
-)
+from config import API_CLIMA, DIAS_A_FRENTE, DIRETORIO_EXTRACOES, FUSO_HORARIO
 from persistencia import anexar_linha
 
 CAMPOS_ATUAIS = (
@@ -70,13 +63,13 @@ def descrever_codigo(codigo) -> str:
         return ""
 
 
-def consultar_clima(
-    latitude: float = LATITUDE, longitude: float = LONGITUDE, timeout: int = 30
-) -> dict:
-    """Busca as condições atuais na Open-Meteo e devolve o bloco `current` do JSON. Uma
-    resposta sem esse bloco levanta ValueError em vez de estourar KeyError cru ou
-    devolver dicionário vazio, seguindo a mesma regra de listar_esportes: num coletor
-    agendado, gravar nada em silêncio custa mais caro do que falhar alto."""
+def consultar_clima(latitude: float, longitude: float, timeout: int = 30) -> dict:
+    """Busca as condições atuais no ponto pedido e devolve o bloco `current` do JSON. As
+    coordenadas são obrigatórias porque cada arena tem as suas, tiradas do endereço que
+    ela publica: um padrão aqui carimbaria em todas o clima de uma cidade só. Resposta
+    sem o bloco levanta ValueError em vez de estourar KeyError cru ou devolver dicionário
+    vazio — num coletor agendado, gravar nada em silêncio custa mais caro do que falhar
+    alto."""
     resposta = requests.get(
         API_CLIMA,
         params={
@@ -118,15 +111,16 @@ def _linha_de_clima(atual: dict, agora: datetime, latitude: float, longitude: fl
 
 def salvar_leitura(
     atual: dict,
+    latitude: float,
+    longitude: float,
     diretorio: str = DIRETORIO_EXTRACOES,
     agora=None,
-    latitude: float = LATITUDE,
-    longitude: float = LONGITUDE,
 ) -> str:
-    """Grava a leitura no CSV único de clima dentro de `diretorio`, com upsert por
-    data_hora: duas coletas caindo no mesmo balde de quinze minutos atualizam a mesma
-    linha em vez de duplicá-la. As coordenadas vão na linha para o histórico continuar
-    legível depois que alguém editar o config. Devolve o caminho gravado."""
+    """Grava a leitura no CSV único de clima dentro de `diretorio`, que é o da arena, com
+    upsert por data_hora: duas coletas caindo no mesmo balde de quinze minutos atualizam a
+    mesma linha em vez de duplicá-la. As coordenadas vão na linha para o histórico dizer
+    de onde a medição veio, mesmo depois que a arena mudar de endereço. Devolve o caminho
+    gravado."""
     agora = agora or datetime.now()
     if diretorio:
         os.makedirs(diretorio, exist_ok=True)
@@ -136,16 +130,18 @@ def salvar_leitura(
     return caminho_csv
 
 
-def coletar_clima(diretorio: str = DIRETORIO_EXTRACOES, agora=None) -> str:
-    """Consulta a API e grava a leitura, devolvendo o caminho do CSV de clima. É a
-    fachada que o gerenciador chama: quem orquestra não precisa saber que existem duas
-    etapas nem qual delas falhou."""
-    return salvar_leitura(consultar_clima(), diretorio, agora)
+def coletar_clima(
+    latitude: float, longitude: float, diretorio: str = DIRETORIO_EXTRACOES, agora=None
+) -> str:
+    """Consulta a API no ponto da arena e grava a leitura, devolvendo o caminho do CSV de
+    clima. É a fachada que o gerenciador chama: quem orquestra não precisa saber que
+    existem duas etapas nem qual delas falhou."""
+    return salvar_leitura(consultar_clima(latitude, longitude), latitude, longitude, diretorio, agora)
 
 
 def consultar_previsao(
-    latitude: float = LATITUDE,
-    longitude: float = LONGITUDE,
+    latitude: float,
+    longitude: float,
     dias_a_frente: int = DIAS_A_FRENTE,
     timeout: int = 30,
 ) -> dict:
@@ -201,10 +197,10 @@ def _linhas_de_previsao(horas: dict, agora: datetime, latitude: float, longitude
 
 def salvar_previsao(
     horas: dict,
+    latitude: float,
+    longitude: float,
     diretorio: str = DIRETORIO_EXTRACOES,
     agora=None,
-    latitude: float = LATITUDE,
-    longitude: float = LONGITUDE,
 ) -> str:
     """Reescreve por inteiro o CSV de previsão dentro de `diretorio`. Aqui não há upsert
     nem histórico: a previsão de uma hora só vale a mais recente, e a versão que importa
@@ -221,8 +217,12 @@ def salvar_previsao(
     return caminho_csv
 
 
-def coletar_previsao(diretorio: str = DIRETORIO_EXTRACOES, agora=None) -> str:
-    """Consulta a previsão e grava a tabela, devolvendo o caminho do CSV. É a fachada
-    irmã de coletar_clima: uma responde o que está acontecendo agora, a outra o que se
-    espera para os horários que ainda podem ser reservados."""
-    return salvar_previsao(consultar_previsao(), diretorio, agora)
+def coletar_previsao(
+    latitude: float, longitude: float, diretorio: str = DIRETORIO_EXTRACOES, agora=None
+) -> str:
+    """Consulta a previsão do ponto da arena e grava a tabela, devolvendo o caminho do
+    CSV. É a fachada irmã de coletar_clima: uma responde o que está acontecendo agora, a
+    outra o que se espera para os horários que ainda podem ser reservados."""
+    return salvar_previsao(
+        consultar_previsao(latitude, longitude), latitude, longitude, diretorio, agora
+    )

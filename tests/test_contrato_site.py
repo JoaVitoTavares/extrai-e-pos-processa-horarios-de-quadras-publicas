@@ -9,6 +9,7 @@ from datetime import date
 
 import pytest
 
+import config
 import courts_collector
 
 pytestmark = pytest.mark.rede
@@ -17,12 +18,25 @@ ESPORTE = "Vôlei de praia"
 PERIODO = "Noite"
 TIMEOUT_PERIODO_MS = 30_000
 HOJE = date.today()
+ARENA = config.ARENAS[0]["url"]
 
 
 @pytest.fixture(scope="module")
 def esportes_do_site():
     """Chama a API JSON de verdade uma vez por execução do módulo."""
-    return courts_collector.listar_esportes()
+    return courts_collector.listar_esportes(ARENA)
+
+
+@pytest.fixture(scope="module")
+def endereco_do_site(navegador):
+    """Abre a primeira arena do config e lê o endereço logo depois de escolher o esporte,
+    que é exatamente o momento em que a coleta o lê."""
+    pagina = navegador.new_page()
+    pagina.goto(ARENA, wait_until="networkidle", timeout=60_000)
+    pagina.get_by_text(ESPORTE, exact=True).first.click()
+    endereco = courts_collector.extrair_endereco(pagina, ESPORTE, timeout_ms=15_000)
+    pagina.close()
+    return endereco
 
 
 @pytest.fixture(scope="module")
@@ -31,7 +45,7 @@ def pagina_no_periodo(navegador):
     repetindo a mesma sequência que coletar_horarios usa — inclusive a espera pelas
     quadras assíncronas — para o canário exercitar o caminho de produção."""
     pagina = navegador.new_page()
-    pagina.goto(courts_collector.URL_ARENA, wait_until="networkidle", timeout=60_000)
+    pagina.goto(ARENA, wait_until="networkidle", timeout=60_000)
     pagina.get_by_text(ESPORTE, exact=True).first.click()
     courts_collector._selecionar_dia(pagina, HOJE, timeout_ms=15_000)
     courts_collector._selecionar_periodo(
@@ -57,6 +71,21 @@ def test_api_ainda_traz_os_tipos_de_interesse(esportes_do_site):
     """Os quatro tipos de quadra que o CSV normaliza continuam existindo no site; se um
     sumir ou for renomeado, TIPOS_QUADRA precisa acompanhar."""
     assert set(courts_collector.TIPOS_QUADRA) <= set(esportes_do_site)
+
+
+def test_a_arena_ainda_publica_o_endereco(endereco_do_site):
+    """O endereço continua na tela depois de escolher o esporte, e continua tendo a
+    vírgula que separa rua de cidade. É dele que saem as coordenadas do clima: no dia em
+    que o site mudar esse bloco de lugar, a arena passaria a coletar quadras normalmente
+    e a gravar clima do último ponto conhecido, sem erro nenhum aparecer."""
+    assert "," in endereco_do_site
+
+
+def test_endereco_nao_e_o_rotulo_da_tela(endereco_do_site):
+    """O que se lê é um endereço, e não o texto fixo que está por perto — a confusão que
+    o canário existe para pegar, já que os dois são o mesmo tipo de bloco no Bubble."""
+    assert "Escolha" not in endereco_do_site
+    assert ESPORTE not in endereco_do_site
 
 
 def test_calendario_ainda_libera_os_dias_a_frente(pagina_no_periodo):

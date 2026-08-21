@@ -1,18 +1,18 @@
-"""Coletor de horários de quadras do SP Sports (webarena.app)."""
+"""Coletor de horários de quadras das arenas do webarena.app."""
 
 import re
 import time
 import requests
 from datetime import date, datetime, timedelta
+from urllib.parse import urljoin
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 from config import (
-    API_INIT,
+    CAMINHO_API_INIT,
     DIAS_A_FRENTE,
     PERIODOS_PADRAO,
     TIMEOUT_NAVEGACAO_MS,
     TIPOS_QUADRA,
-    URL_ARENA,
 )
 from persistencia import sem_acento
 
@@ -21,6 +21,23 @@ PADRAO_DESCOBERTA = re.compile(r"extern|descobert", re.IGNORECASE)
 PADRAO_COBERTA = re.compile(r"intern|cobert", re.IGNORECASE)
 PADRAO_FUTSAL = re.compile(r"futsal|futebol de sal", re.IGNORECASE)
 SELETOR_QUADRAS = "div.bubble-rg-flex-row > div.group-item"
+SELETOR_CAMPO_DE_DATA = ".picker__input"
+SCRIPT_ENDERECO = """
+(esporte) => {
+  const campo = document.querySelector('.picker__input');
+  const limite = campo ? campo.getBoundingClientRect().top : Infinity;
+  const textos = [...document.querySelectorAll('div.bubble-element.Text')]
+    .map((elemento) => {
+      const caixa = elemento.getBoundingClientRect();
+      return {topo: caixa.top, altura: caixa.height, texto: (elemento.innerText || '').trim()};
+    })
+    .filter((item) => item.texto && item.altura > 0 && item.topo < limite)
+    .sort((a, b) => a.topo - b.topo)
+    .map((item) => item.texto);
+  const inicio = textos.indexOf(esporte);
+  return inicio < 0 ? '' : textos.slice(inicio + 1).find((texto) => texto.includes(',')) || '';
+}
+"""
 FORMATO_DIA_NO_CALENDARIO = "%d/%m/%y"
 ESPERA_CALENDARIO_MS = 3_000
 
@@ -50,14 +67,22 @@ def _tipo_quadra(esporte: str, nome_quadra: str | None) -> str:
     return esporte
 
 
-def listar_esportes() -> list[str]:
-    """Lista os esportes chamando a API JSON diretamente, sem abrir navegador. Um JSON
-    fora do formato esperado levanta ValueError em vez de estourar um KeyError cru ou
-    devolver lista vazia: num coletor agendado, gravar nada em silêncio custa mais caro
-    do que falhar alto."""
+def api_init_de(url_arena: str) -> str:
+    """Monta o endereço da API JSON a partir da URL da arena, em vez de fixá-lo no config.
+    O caminho é o mesmo para todas — é o mesmo aplicativo Bubble por trás —, mas o
+    domínio não precisa ser: derivar a API da própria arena é o que permite a lista de
+    sites crescer para fora do webarena.app sem tocar em nenhuma outra linha."""
+    return urljoin(url_arena, CAMINHO_API_INIT)
+
+
+def listar_esportes(url_arena: str) -> list[str]:
+    """Lista os esportes de uma arena chamando a API JSON diretamente, sem abrir
+    navegador. Um JSON fora do formato esperado levanta ValueError em vez de estourar um
+    KeyError cru ou devolver lista vazia: num coletor agendado, gravar nada em silêncio
+    custa mais caro do que falhar alto."""
     resposta = requests.get(
-        API_INIT,
-        params={"location": URL_ARENA},
+        api_init_de(url_arena),
+        params={"location": url_arena},
         headers={"User-Agent": "Mozilla/5.0"},
         timeout=30,
     )
@@ -66,7 +91,22 @@ def listar_esportes() -> list[str]:
     try:
         return dados[0]["data"]["esportes_list_text"]
     except (KeyError, IndexError, TypeError) as erro:
-        raise ValueError(f"{API_INIT} devolveu JSON em formato inesperado: {erro}") from erro
+        raise ValueError(
+            f"{api_init_de(url_arena)} devolveu JSON em formato inesperado: {erro}"
+        ) from erro
+
+
+def extrair_endereco(pagina, esporte: str, timeout_ms: int = TIMEOUT_NAVEGACAO_MS) -> str:
+    """Lê o endereço que a arena publica entre o nome do esporte escolhido e o campo de
+    data. É a única coisa na página que diz em que cidade a quadra fica, e é dele que
+    saem as coordenadas do clima. O que o identifica é a vírgula que separa rua e cidade,
+    que o distingue do rótulo logo abaixo. Não achando, devolve vazio: a arena passa a
+    rodada com o local que já conhecia, em vez de receber o clima de outro lugar."""
+    try:
+        pagina.locator(SELETOR_CAMPO_DE_DATA).first.wait_for(state="visible", timeout=timeout_ms)
+    except PWTimeout:
+        return ""
+    return pagina.evaluate(SCRIPT_ENDERECO, esporte) or ""
 
 
 def esportes_alvo(esportes_do_site: list[str]) -> list[str]:
@@ -303,21 +343,24 @@ def _coletar_dia(
 
 def coletar_horarios(
     esporte: str,
+    url_arena: str,
     periodo: str | None = None,
     headless: bool = True,
     dias_a_frente: int = DIAS_A_FRENTE,
 ) -> list[dict]:
-    """Abre o navegador uma vez e extrai os horários de um esporte em hoje e nos
+    """Abre o navegador uma vez e extrai os horários de um esporte da arena em hoje e nos
     `dias_a_frente` seguintes. Com `periodo` informado coleta apenas aquele; com None
     percorre PERIODOS_PADRAO. Um dia que o calendário não libere e um período cujo
     conteúdo não troca em 6s são pulados. O preço só é aberto no dia de hoje: são dezenas
-    de cliques por rodada, e o horário futuro ainda será visitado no seu próprio dia."""
+    de cliques por rodada, e o horário futuro ainda será visitado no seu próprio dia. O
+    endereço acompanha cada quadra porque é ele que diz de onde vem o clima daquela."""
     with sync_playwright() as p:
         navegador = p.chromium.launch(headless=headless)
         pagina = navegador.new_page()
 
-        pagina.goto(URL_ARENA, wait_until="networkidle", timeout=60_000)
+        pagina.goto(url_arena, wait_until="networkidle", timeout=60_000)
         pagina.get_by_text(esporte, exact=True).first.click()
+        endereco = extrair_endereco(pagina, esporte)
 
         periodos = [periodo] if periodo else PERIODOS_PADRAO
 
@@ -331,4 +374,4 @@ def coletar_horarios(
 
         navegador.close()
 
-    return resultados
+    return [dict(quadra, endereco=endereco) for quadra in resultados]

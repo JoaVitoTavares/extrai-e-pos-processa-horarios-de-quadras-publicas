@@ -4,17 +4,20 @@ import pytest
 
 import config
 import courts_collector
+import localizacao
+import main
 import persistencia
 
 
 @pytest.mark.parametrize(
     "modulo, nome",
     [
-        (courts_collector, "URL_ARENA"),
-        (courts_collector, "API_INIT"),
+        (courts_collector, "CAMINHO_API_INIT"),
         (courts_collector, "TIPOS_QUADRA"),
         (courts_collector, "PERIODOS_PADRAO"),
         (courts_collector, "TIMEOUT_NAVEGACAO_MS"),
+        (localizacao, "API_GEOCODIFICACAO"),
+        (localizacao, "IDENTIFICACAO_GEOCODIFICACAO"),
         (persistencia, "DIRETORIO_EXTRACOES"),
     ],
 )
@@ -25,12 +28,20 @@ def test_modulo_reexporta_o_valor_do_config(modulo, nome):
     assert getattr(modulo, nome) is getattr(config, nome)
 
 
-def test_coordenadas_sao_numeros():
-    """A latitude e a longitude entram como parâmetro de consulta na API de clima, que
-    espera número: guardá-las como texto no config passaria despercebido até a primeira
-    chamada real."""
-    assert isinstance(config.LATITUDE, float)
-    assert isinstance(config.LONGITUDE, float)
+def test_toda_arena_tem_url():
+    """A URL é a única coisa que uma arena não pode deixar de declarar: é dela que saem a
+    API JSON, a página que o navegador abre e o diretório onde ela grava."""
+    assert config.ARENAS
+    for arena in config.ARENAS:
+        assert arena["url"].startswith("http")
+
+
+def test_arenas_nao_repetem_o_diretorio():
+    """Duas arenas apontando para o mesmo diretório misturariam os históricos e fariam
+    uma sobrescrever o clima da outra — o mesmo estrago que o arquivo por quadra existe
+    para evitar, um nível acima."""
+    diretorios = [main.preparar_arena(arena)["diretorio"] for arena in config.ARENAS]
+    assert len(set(diretorios)) == len(diretorios)
 
 
 def test_janela_do_clima_e_um_intervalo_valido():

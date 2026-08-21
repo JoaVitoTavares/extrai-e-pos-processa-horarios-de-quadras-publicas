@@ -28,6 +28,53 @@ def quadra(nome, horarios, coberta="true", tipo="Vôlei de praia", periodo="Noit
     }
 
 
+def test_arena_e_cidade_abrem_o_csv():
+    """As duas colunas que dizem de onde a linha veio ficam à frente de tudo: com vários
+    sites coletados, é por elas que se separa o histórico de uma arena do da outra depois
+    que os arquivos forem juntados num dataset só."""
+    assert persistencia.COLUNAS_CSV[:2] == ["arena", "cidade"]
+
+
+def test_linha_carrega_a_arena_e_a_cidade():
+    """Arena e cidade vêm de fora do coletor — uma do config, outra do endereço
+    geocodificado — e descem para cada linha da quadra."""
+    resultados = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre"}])]
+    linha = persistencia._achatar_linhas(resultados, AGORA, "SP Sports", "Canoas")[0]
+
+    assert linha["arena"] == "SP Sports"
+    assert linha["cidade"] == "Canoas"
+
+
+def test_cidade_descoberta_depois_preenche_a_linha_ja_gravada(tmp_path):
+    """Numa arena nova, a primeira rodada insere de uma vez os horários de todos os dias
+    à frente. Se o geocodificador estiver fora do ar nessa hora, a cidade entra vazia — e
+    precisa ser preenchida quando a rodada seguinte a descobrir, senão duas semanas de
+    linhas ficariam sem lugar para sempre."""
+    horarios = [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])]
+    persistencia.salvar_extracao(horarios, str(tmp_path), AGORA, arena="SP Sports")
+    caminho = persistencia.salvar_extracao(
+        horarios, str(tmp_path), datetime(2026, 8, 7, 9, 0), arena="SP Sports", cidade="Canoas"
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "cidade"] == "Canoas"
+
+
+def test_rodada_sem_cidade_nao_apaga_a_que_ja_estava(tmp_path):
+    """O contrário também vale: a rodada em que o geocodificador falhou não pode apagar a
+    cidade que a anterior descobriu. Vazio aqui quer dizer 'não sei', e não 'não tem'."""
+    horarios = [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])]
+    persistencia.salvar_extracao(
+        horarios, str(tmp_path), AGORA, arena="SP Sports", cidade="Canoas"
+    )
+    caminho = persistencia.salvar_extracao(
+        horarios, str(tmp_path), datetime(2026, 8, 7, 9, 0), arena="SP Sports"
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "cidade"] == "Canoas"
+
+
 def test_coluna_quadra_coberta_vem_logo_apos_tipo_quadra():
     """A coluna nova entra ao lado de tipo_quadra, não no fim do CSV."""
     colunas = persistencia.COLUNAS_CSV
