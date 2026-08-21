@@ -1,9 +1,12 @@
 """Testes da extração quadra a quadra, contra o HTML real congelado em fixtures."""
 
+from datetime import date, timedelta
+
 import pytest
 
 import courts_collector
 
+DIA = date(2026, 8, 7)
 HORARIOS_ESPERADOS = {
     "Areia 1 - Interna": [
         ("17:00", "Indisponível"), ("18:00", "Indisponível"), ("19:00", "Indisponível"),
@@ -31,7 +34,7 @@ def quadras_volei(carregar_fixture):
     """Extrai as quatro quadras de vôlei da fixture, ponto de partida da maior parte
     dos testes deste arquivo."""
     pagina = carregar_fixture("quatro_quadras_volei.html")
-    return courts_collector._extrair_quadras(pagina, "Vôlei de praia", "Noite")
+    return courts_collector._extrair_quadras(pagina, "Vôlei de praia", "Noite", DIA)
 
 
 def test_uma_entrada_por_quadra(quadras_volei):
@@ -85,13 +88,25 @@ def test_horarios_nao_vazam_entre_quadras(quadras_volei):
 
 
 def test_metadados_do_periodo_em_cada_quadra(quadras_volei):
-    """Esporte, período e horário da coleta acompanham cada quadra, porque a linha do
-    CSV é montada a partir do item da quadra, não do período."""
+    """Esporte, período, dia e horário da coleta acompanham cada quadra, porque a linha
+    do CSV é montada a partir do item da quadra, não do período."""
     for quadra in quadras_volei:
         assert quadra["esporte"] == "Vôlei de praia"
         assert quadra["periodo"] == "Noite"
+        assert quadra["data"] == "2026-08-07"
         assert quadra["coletado_em"]
         assert quadra["aviso"] is None
+
+
+def test_data_vem_do_calendario_e_nao_do_relogio(carregar_fixture):
+    """A quadra é carimbada com o dia que está selecionado no calendário: numa rodada que
+    percorre vários dias, usar a data de hoje jogaria os horários de amanhã na linha de
+    hoje — e o histórico passaria a mentir sobre quando o jogo aconteceria."""
+    pagina = carregar_fixture("quatro_quadras_volei.html")
+    amanha = DIA + timedelta(days=1)
+    quadras = courts_collector._extrair_quadras(pagina, "Vôlei de praia", "Noite", amanha)
+
+    assert {quadra["data"] for quadra in quadras} == {"2026-08-08"}
 
 
 def test_raiz_da_quadra_permite_escopar_o_clique(quadras_volei):
@@ -104,7 +119,7 @@ def test_raiz_da_quadra_permite_escopar_o_clique(quadras_volei):
 def test_quadra_unica_continua_funcionando(carregar_fixture):
     """O caso de um esporte com uma quadra só — como o futsal de hoje — não regride."""
     pagina = carregar_fixture("quadra_unica_grama7.html")
-    quadras = courts_collector._extrair_quadras(pagina, "Grama 7", "Noite")
+    quadras = courts_collector._extrair_quadras(pagina, "Grama 7", "Noite", DIA)
 
     assert len(quadras) == 1
     assert quadras[0]["quadra"] == "GRAMA 7 - EXTERNA"
@@ -118,9 +133,10 @@ def test_pagina_sem_quadras_devolve_aviso(pagina):
     """Sem nenhum bloco de quadra na tela, o período vira um item único com aviso — o
     mesmo comportamento de hoje para período que não carregou."""
     pagina.set_content("<div></div>")
-    quadras = courts_collector._extrair_quadras(pagina, "Futebol de salão", "Manhã")
+    quadras = courts_collector._extrair_quadras(pagina, "Futebol de salão", "Manhã", DIA)
 
     assert len(quadras) == 1
     assert quadras[0]["quadra"] is None
     assert quadras[0]["horarios"] == []
     assert quadras[0]["aviso"]
+    assert quadras[0]["data"] == "2026-08-07"

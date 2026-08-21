@@ -1,8 +1,12 @@
 """Testes da leitura de preço de um slot e do escopo dessa leitura à quadra certa."""
 
+from datetime import date
+
 import pytest
 
 import courts_collector
+
+DIA = date(2026, 8, 7)
 
 
 @pytest.mark.parametrize(
@@ -42,7 +46,7 @@ def quadras_com_precos(carregar_fixture):
     """Carrega a fixture de duas quadras que compartilham o horário 17:00 com preços
     diferentes, que é o cenário onde o escopo importa."""
     pagina = carregar_fixture("slot_com_precos.html")
-    return courts_collector._extrair_quadras(pagina, "Futebol de salão", "Tarde")
+    return courts_collector._extrair_quadras(pagina, "Futebol de salão", "Tarde", DIA)
 
 
 @pytest.mark.parametrize("indice, esperado", [(0, 150.0), (1, 90.0)])

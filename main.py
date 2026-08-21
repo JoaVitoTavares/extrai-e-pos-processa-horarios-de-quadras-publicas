@@ -7,7 +7,7 @@ from playwright.sync_api import TimeoutError as PWTimeout
 from courts_collector import coletar_horarios, esportes_alvo, listar_esportes, tipos_ausentes
 from persistencia import salvar_extracao
 from tratamento import TratamentoDeDados
-from weather_collector import coletar_clima
+from weather_collector import coletar_clima, coletar_previsao
 
 
 def coletar_quadras(modo_visivel: bool = False) -> list[dict]:
@@ -46,12 +46,25 @@ def registrar_clima() -> str | None:
         return None
 
 
+def registrar_previsao() -> str | None:
+    """Coleta a previsão hora a hora dos dias que a extração percorre e devolve o caminho
+    gravado, ou None se a API falhar. Vale a mesma tolerância da leitura atual: sem a
+    previsão desta rodada, a reserva detectada agora fica com a coluna vazia e a próxima
+    rodada a preenche, o que custa menos do que derrubar a execução."""
+    print("\n>> PREVISÃO (API Open-Meteo): horas à frente na arena...")
+    try:
+        return coletar_previsao()
+    except (requests.RequestException, ValueError) as erro:
+        print(f"[AVISO] previsão não coletada: {erro}", file=sys.stderr)
+        return None
+
+
 def _imprimir_extracao(dados: dict) -> None:
     """Imprime o bloco de uma quadra num período: cabeçalho com esporte e cobertura,
     um horário por linha com 🟢 para livre e 🔴 para indisponível, e o resumo de vagas.
     Um período que não carregou mostra só o aviso, já que não há horário para listar."""
     print("\n" + "=" * 46)
-    print(f"  {dados['esporte']}  |  Período: {dados['periodo']}")
+    print(f"  {dados['esporte']}  |  {dados['data']}  |  Período: {dados['periodo']}")
     if dados["quadra"]:
         cobertura = {"true": "coberta", "false": "descoberta"}.get(dados["quadra_coberta"], "?")
         print(f"  {dados['quadra']}  ({cobertura})")
@@ -71,10 +84,11 @@ def _imprimir_extracao(dados: dict) -> None:
 
 
 def main() -> None:
-    """Executa a extração ponta a ponta: coleta as quadras, imprime o que achou, grava um
-    CSV por quadra, registra a leitura de clima do momento e a aplica nas reservas que
-    estão na janela. Uma execução que não colete quadra nenhuma sai com erro em vez de
-    gravar silêncio — o modo de falha mais caro num coletor agendado."""
+    """Executa a extração ponta a ponta: coleta as quadras de hoje e dos próximos dias,
+    imprime o que achou, grava um CSV por quadra — é na gravação que a reserva feita
+    entre duas rodadas é detectada —, registra a leitura de clima e a previsão, e aplica
+    as duas nas reservas. Uma execução que não colete quadra nenhuma sai com erro em vez
+    de gravar silêncio — o modo de falha mais caro num coletor agendado."""
     modo_visivel = "--ver" in sys.argv
 
     resultados = coletar_quadras(modo_visivel)
@@ -83,6 +97,7 @@ def main() -> None:
 
     caminhos = salvar_extracao(resultados)
     caminho_clima = registrar_clima()
+    caminho_previsao = registrar_previsao()
     enriquecidos = TratamentoDeDados().aplicar()
 
     if not caminhos:
@@ -94,6 +109,8 @@ def main() -> None:
         print(f"   {caminho}")
     if caminho_clima:
         print(f"\n>> Clima registrado em {caminho_clima}")
+    if caminho_previsao:
+        print(f">> Previsão registrada em {caminho_previsao}")
     print(f">> Clima aplicado em {len(enriquecidos)} arquivo(s) de quadra.")
     print()
 

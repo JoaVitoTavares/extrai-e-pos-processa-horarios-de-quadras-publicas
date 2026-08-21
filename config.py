@@ -11,6 +11,7 @@ FUSO_HORARIO = "America/Sao_Paulo"
 TIPOS_QUADRA = ["Vôlei de praia", "Futebol de salão", "Grama 7", "Grama 5"]
 PERIODOS_PADRAO = ["Manhã", "Tarde", "Noite"]
 TIMEOUT_NAVEGACAO_MS = 30_000
+DIAS_A_FRENTE = 14
 
 DIRETORIO_EXTRACOES = ".extracoes"
 

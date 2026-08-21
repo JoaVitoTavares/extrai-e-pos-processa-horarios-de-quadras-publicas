@@ -32,6 +32,22 @@ PAYLOAD = {
     "current_units": {"temperature_2m": "°C", "wind_speed_10m": "km/h"},
     "current": ATUAL,
 }
+HORARIA = {
+    "time": ["2026-08-16T20:00", "2026-08-16T21:00"],
+    "temperature_2m": [18.9, 17.5],
+    "relative_humidity_2m": [88, 90],
+    "precipitation": [2.4, 0.0],
+    "precipitation_probability": [70, 20],
+    "weather_code": [63, 0],
+    "wind_speed_10m": [19.4, 12.0],
+}
+PAYLOAD_PREVISAO = {
+    "latitude": -29.912127,
+    "longitude": -51.23398,
+    "timezone": "America/Sao_Paulo",
+    "hourly_units": {"temperature_2m": "°C", "precipitation": "mm"},
+    "hourly": HORARIA,
+}
 
 
 @pytest.mark.parametrize(
@@ -195,3 +211,90 @@ def test_coletar_clima_consulta_e_grava(respostas, tmp_path):
 
     assert os.path.basename(caminho) == weather_collector.ARQUIVO_CLIMA
     assert df.loc[0, "data_hora"] == "2026-08-16T16:45"
+
+
+def test_previsao_pede_as_horas_do_horizonte_da_coleta(respostas):
+    """A previsão cobre os mesmos dias que o coletor de quadras percorre: reserva só é
+    vista nascer dentro dessa janela, e é para ela que existe previsão a congelar. Hoje
+    conta junto com os dias à frente, daí o +1."""
+    chamadas, get_falso = respostas
+    get_falso.resposta = RespostaFalsa(PAYLOAD_PREVISAO)
+    weather_collector.consultar_previsao()
+
+    url, kwargs = chamadas[0]
+    assert url == config.API_CLIMA
+    assert kwargs["params"]["forecast_days"] == config.DIAS_A_FRENTE + 1
+    assert kwargs["params"]["timezone"] == config.FUSO_HORARIO
+    assert kwargs["params"]["hourly"].split(",") == [
+        "temperature_2m", "relative_humidity_2m", "precipitation",
+        "precipitation_probability", "weather_code", "wind_speed_10m",
+    ]
+    assert kwargs["timeout"] > 0
+
+
+@pytest.mark.parametrize("payload", [{}, {"hourly": None}, {"hourly": {}}, [], "erro"])
+def test_json_sem_o_bloco_horario_levanta_erro(respostas, payload):
+    """Vale para a previsão a mesma regra da leitura atual: formato inesperado quebra
+    alto, em vez de gravar uma tabela vazia que ninguém veria faltar."""
+    chamadas, get_falso = respostas
+    get_falso.resposta = RespostaFalsa(payload)
+
+    with pytest.raises(ValueError, match="formato inesperado"):
+        weather_collector.consultar_previsao()
+
+
+def test_previsao_vira_uma_linha_por_hora(tmp_path):
+    """O bloco `hourly` vem como uma lista por campo e é transposto em uma linha por
+    hora, com o código já traduzido — o mesmo desenho do CSV de leituras."""
+    caminho = weather_collector.salvar_previsao(HORARIA, str(tmp_path), AGORA)
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert list(df.columns) == weather_collector.COLUNAS_PREVISAO
+    assert list(df["data_hora"]) == ["2026-08-16T20:00", "2026-08-16T21:00"]
+    assert df.loc[0, "clima"] == "Chuva moderada"
+    assert df.loc[0, "temperatura"] == "18.9"
+    assert df.loc[0, "probabilidade_chuva"] == "70"
+    assert df.loc[1, "clima"] == "Céu limpo"
+
+
+def test_campo_que_a_api_deixar_de_mandar_vira_coluna_vazia(tmp_path):
+    """Uma variável que suma da resposta não pode derrubar a transposição inteira: a
+    coluna fica vazia e as outras horas continuam gravadas."""
+    sem_vento = {chave: valor for chave, valor in HORARIA.items() if chave != "wind_speed_10m"}
+    caminho = weather_collector.salvar_previsao(sem_vento, str(tmp_path), AGORA)
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert len(df) == 2
+    assert list(df["velocidade_vento"]) == ["", ""]
+    assert df.loc[0, "temperatura"] == "18.9"
+
+
+def test_rodada_nova_substitui_a_previsao_inteira(tmp_path):
+    """A tabela de previsão não é histórico: cada rodada reescreve o arquivo, porque de
+    uma hora prevista só interessa a versão mais recente. A versão antiga que importa
+    guardar é a que o tratamento congelou na linha da reserva."""
+    weather_collector.salvar_previsao(HORARIA, str(tmp_path), AGORA)
+    revisada = dict(HORARIA, time=["2026-08-16T22:00"], weather_code=[95],
+                    temperature_2m=[16.0], relative_humidity_2m=[95], precipitation=[8.0],
+                    precipitation_probability=[90], wind_speed_10m=[30.0])
+    caminho = weather_collector.salvar_previsao(revisada, str(tmp_path), AGORA)
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert list(df["data_hora"]) == ["2026-08-16T22:00"]
+
+
+def test_arquivo_de_previsao_nao_casa_com_o_glob_das_quadras():
+    """Mesmo cuidado do arquivo de leituras: a tabela de previsão divide o diretório com
+    os CSVs de quadra e não pode ser varrida junto com eles."""
+    assert not fnmatch.fnmatch(weather_collector.ARQUIVO_PREVISAO, "*" + persistencia.SUFIXO_CSV)
+
+
+def test_coletar_previsao_consulta_e_grava(respostas, tmp_path):
+    """A fachada irmã de coletar_clima também faz as duas etapas de uma vez."""
+    chamadas, get_falso = respostas
+    get_falso.resposta = RespostaFalsa(PAYLOAD_PREVISAO)
+    caminho = weather_collector.coletar_previsao(str(tmp_path), AGORA)
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert os.path.basename(caminho) == weather_collector.ARQUIVO_PREVISAO
+    assert df.loc[0, "data_hora"] == "2026-08-16T20:00"
