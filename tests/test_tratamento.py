@@ -221,6 +221,83 @@ def reservar(diretorio, hora="20:00", quando=datetime(2026, 8, 7, 10, 0), data=D
     )
 
 
+def test_clima_do_instante_da_reserva_e_congelado(extracoes):
+    """A pergunta que a coluna responde é que tempo fazia na hora em que a pessoa
+    reservou. Detectada a virada, o tratamento procura no histórico a observação daquele
+    instante e a copia para a linha, nas mesmas cinco variáveis do bloco do jogo."""
+    weather_collector.salvar_leitura(
+        dict(ATUAL, time="2026-08-07T10:00", weather_code=61, temperature_2m=19.8),
+        str(extracoes), datetime(2026, 8, 7, 10, 0),
+    )
+    reservar(extracoes)
+    TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 10, 0))
+    linha = reservas(extracoes).loc[0]
+
+    assert linha["reservado_em"] == "2026-08-07T10:00:00"
+    assert linha["reserva_clima"] == "Chuva fraca"
+    assert linha["reserva_temperatura"] == "19.8"
+    assert linha["reserva_umidade"] == "76"
+    assert linha["reserva_precipitacao"] == "0.0"
+    assert linha["reserva_velocidade_vento"] == "13.1"
+
+
+def test_clima_da_reserva_nao_e_reescrito_por_rodada_posterior(extracoes):
+    """Congelado uma vez, o bloco fica: ele descreve um instante que já passou, e a
+    observação da rodada seguinte é outro instante — o da janela do jogo, que tem as suas
+    próprias colunas e não pode empurrar esta para a frente."""
+    weather_collector.salvar_leitura(
+        dict(ATUAL, time="2026-08-07T10:00", weather_code=61), str(extracoes),
+        datetime(2026, 8, 7, 10, 0),
+    )
+    reservar(extracoes)
+    tratamento = TratamentoDeDados(str(extracoes))
+    tratamento.aplicar(datetime(2026, 8, 7, 10, 0))
+
+    weather_collector.salvar_leitura(
+        dict(ATUAL, time="2026-08-07T17:00", weather_code=0), str(extracoes),
+        datetime(2026, 8, 7, 17, 0),
+    )
+    tratamento.aplicar(datetime(2026, 8, 7, 17, 0))
+    linha = reservas(extracoes).loc[0]
+
+    assert linha["reserva_clima"] == "Chuva fraca"
+    assert linha["clima"] == "Céu limpo"
+
+
+def test_horario_livre_nao_recebe_o_clima_da_reserva(extracoes):
+    """O bloco é propriedade da reserva, não do horário: enquanto ninguém reservou ele
+    fica vazio, mesmo havendo observação fresca no histórico — vazio aqui quer dizer 'não
+    houve reserva', e não 'não se sabe o tempo daquele momento'."""
+    TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 16, 30))
+
+    assert reservas(extracoes).loc[0, "reserva_clima"] == ""
+
+
+def test_clima_da_reserva_usa_a_observacao_mais_proxima_da_virada(extracoes):
+    """A API arredonda a leitura em baldes de quinze minutos, então o balde que fechou
+    depois da reserva pode ser o mais perto dela: a reserva das 10:40 fica com a leitura
+    das 10:45, e não com a das 10:30, que está dez minutos mais longe."""
+    for hora, codigo in [("10:30", 3), ("10:45", 95)]:
+        weather_collector.salvar_leitura(
+            dict(ATUAL, time=f"2026-08-07T{hora}", weather_code=codigo), str(extracoes),
+            datetime(2026, 8, 7, 10, 45),
+        )
+    reservar(extracoes, quando=datetime(2026, 8, 7, 10, 40))
+    TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 10, 45))
+
+    assert reservas(extracoes).loc[0, "reserva_clima"] == "Trovoada"
+
+
+def test_reserva_sem_observacao_por_perto_fica_sem_o_bloco(extracoes):
+    """Rodada em que a Open-Meteo caiu deixa a reserva sem observação vizinha, e a leitura
+    de horas antes não serve de substituta: a coluna fica vazia, pela mesma regra da
+    janela — clima de outra hora carimbado numa reserva é pior do que a lacuna."""
+    reservar(extracoes, quando=datetime(2026, 8, 7, 19, 0))
+    TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 19, 0))
+
+    assert reservas(extracoes).loc[0, "reserva_clima"] == ""
+
+
 def test_previsao_congelada_na_reserva_recem_detectada(extracoes):
     """A reserva de dois dias antes não se explica pela observação de uma hora antes do
     jogo: o que a pessoa viu foi a previsão. Detectada a virada, a previsão daquele

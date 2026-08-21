@@ -43,21 +43,26 @@ def test_colunas_de_clima_ficam_em_bloco_contiguo():
     assert colunas[inicio:inicio + 5] == [
         "clima", "temperatura", "umidade", "precipitacao", "velocidade_vento"
     ]
-    assert colunas.index("feriado") == inicio + 10
+    assert colunas.index("feriado") == inicio + 15
 
 
-def test_previsao_espelha_as_colunas_do_clima_observado():
-    """O bloco previsto vem logo depois do observado e traz exatamente as mesmas cinco
-    variáveis, com prefixo: é o que permite comparar o que se esperava do tempo com o
-    que de fato aconteceu, sem procurar equivalência entre nomes diferentes."""
+def test_os_tres_blocos_de_clima_espelham_as_mesmas_variaveis():
+    """Observado no jogo, observado na hora da reserva e previsto trazem exatamente as
+    mesmas cinco variáveis, com prefixo, e ficam nessa ordem: é o que permite comparar
+    ponta a ponta o tempo que a pessoa viu ao reservar, o que se esperava para o jogo e
+    o que de fato fez, sem procurar equivalência entre nomes diferentes."""
     colunas = persistencia.COLUNAS_CSV
-    inicio = colunas.index("previsao_clima")
+    inicio = colunas.index("clima")
 
+    assert persistencia.COLUNAS_DO_CLIMA_NA_RESERVA == [
+        f"reserva_{coluna}" for coluna in persistencia.COLUNAS_DE_CLIMA
+    ]
     assert persistencia.COLUNAS_DA_PREVISAO == [
         f"previsao_{coluna}" for coluna in persistencia.COLUNAS_DE_CLIMA
     ]
-    assert colunas[inicio:inicio + 5] == persistencia.COLUNAS_DA_PREVISAO
-    assert colunas.index("velocidade_vento") == inicio - 1
+    assert colunas[inicio + 5:inicio + 15] == (
+        persistencia.COLUNAS_DO_CLIMA_NA_RESERVA + persistencia.COLUNAS_DA_PREVISAO
+    )
 
 
 def test_colunas_da_reserva_ficam_juntas_do_carimbo_da_coleta():
@@ -284,9 +289,9 @@ def test_reserva_detectada_nao_e_reescrita_pelas_rodadas_seguintes(tmp_path):
 
 def test_cancelamento_apaga_o_que_a_reserva_tinha_deixado(tmp_path):
     """Voltando a livre, a reserva deixou de existir: as colunas que a descreviam saem
-    junto, inclusive a previsão congelada. Manter o carimbo antigo seria afirmar uma
-    reserva que não está mais lá; se o horário for reservado de novo, a próxima virada
-    grava a data nova."""
+    junto, inclusive os dois blocos de clima congelados na virada. Manter o carimbo antigo
+    seria afirmar uma reserva que não está mais lá; se o horário for reservado de novo, a
+    próxima virada grava a data nova e o tratamento congela o clima daquele instante."""
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])], str(tmp_path), AGORA
     )
@@ -295,7 +300,10 @@ def test_cancelamento_apaga_o_que_a_reserva_tinha_deixado(tmp_path):
         str(tmp_path), datetime(2026, 8, 7, 15, 0),
     )[0]
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
-    df.loc[0, persistencia.COLUNAS_DA_PREVISAO] = ["Chuva forte", "15.2", "80", "4.1", "22.0"]
+    df.loc[0, persistencia.COLUNAS_CONGELADAS_NA_VIRADA] = [
+        "Encoberto", "24.4", "76", "0.0", "13.1",
+        "Chuva forte", "15.2", "80", "4.1", "22.0",
+    ]
     df.to_csv(caminho, index=False)
 
     persistencia.salvar_extracao(
@@ -304,7 +312,9 @@ def test_cancelamento_apaga_o_que_a_reserva_tinha_deixado(tmp_path):
     )
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
-    assert list(df.loc[0, persistencia.COLUNAS_DA_VIRADA]) == [""] * 8
+    assert list(df.loc[0, persistencia.COLUNAS_DA_VIRADA]) == (
+        [""] * len(persistencia.COLUNAS_DA_VIRADA)
+    )
 
 
 def test_slot_de_outro_dia_nao_congela_pelo_relogio_de_hoje(tmp_path):

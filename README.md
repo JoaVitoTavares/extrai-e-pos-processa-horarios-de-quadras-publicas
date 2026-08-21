@@ -95,9 +95,11 @@ com o status `Livre`, ninguém reservou; com o status `Indisponível`, o horári
 chegou ocupado** à primeira observação, e a hora da reserva é anterior ao histórico. Uma
 coisa que a coluna nunca faz é chutar: carimbar a hora da coleta seria inventar dado.
 
-Um cancelamento — de `Indisponível` de volta para `Livre` — **apaga** as quatro colunas.
-Manter o carimbo antigo seria afirmar uma reserva que não existe mais; se o horário for
-reservado de novo, a próxima virada grava a data nova.
+Um cancelamento — de `Indisponível` de volta para `Livre` — **apaga** o que a reserva
+deixou: as três colunas que a descrevem e os dois blocos de clima congelados na virada
+(`reserva_*` e `previsao_*`). Manter o carimbo antigo seria afirmar uma reserva que não
+existe mais; se o horário for reservado de novo, a próxima virada grava a data nova.
+`primeira_coleta` fica de fora: a observação daquele horário não recomeçou.
 
 > A virada é detectada **na gravação**, comparando o status que está no CSV com o que a
 > coleta acabou de trazer. Só vale enquanto o horário está no futuro: depois que o jogo
@@ -145,6 +147,15 @@ existe para o futuro — não há probabilidade de uma chuva que já caiu.
 
 ## A janela de clima de cada reserva
 
+Cada linha carrega **três blocos de clima**, com as mesmas cinco variáveis, respondendo a
+perguntas diferentes. Confundi-los é fácil, e a diferença é o ponto:
+
+| Bloco | Que instante descreve | Quando é escrito |
+| --- | --- | --- |
+| `clima`, `temperatura`, … | O tempo pouco antes do jogo | Rodada a rodada na janela — vale a **última** |
+| `reserva_*` | O tempo na hora em que a pessoa reservou | Uma vez, na virada de status |
+| `previsao_*` | O que se previa para a hora do jogo | Uma vez, na virada de status |
+
 Depois das duas coletas, o `tratamento.py` escreve `clima`, `temperatura`, `umidade`,
 `precipitacao` e `velocidade_vento` nas reservas — mas só nas que estão na **janela**:
 de 4 horas antes até 1 hora antes do horário reservado, com as duas pontas incluídas.
@@ -169,6 +180,27 @@ Duas recusas deliberadas: leitura de clima **futura** é ignorada (indica relóg
 desalinhado, não previsão), e leitura **velha demais** também
 (`TOLERANCIA_LEITURA_CLIMA_MIN`) — carimbar numa reserva o clima de três horas atrás é
 pior do que deixar a lacuna.
+
+### O clima que fazia na hora de reservar
+
+A mesma virada de status que data a reserva serve para saber **que tempo fazia quando ela
+foi feita**: detectado o `reservado_em`, o tratamento procura no histórico de observações
+a leitura daquele instante e a congela em `reserva_clima`, `reserva_temperatura`,
+`reserva_umidade`, `reserva_precipitacao` e `reserva_velocidade_vento`.
+
+É a variável que faltava para a pergunta do trabalho. `previsao_*` diz o que a pessoa
+**esperava** para a hora do jogo; `reserva_*` diz o que ela estava **vendo pela janela** na
+hora de decidir. Uma tarde de chuva enche a quadra coberta na mesma medida em que esvazia
+a de areia, e isso não aparece na previsão do jogo nem na observação de uma hora antes.
+
+A leitura escolhida é a **mais próxima do instante da reserva, antes ou depois dele**: a
+API arredonda o horário em baldes de 15 minutos, então a reserva das 14:32 fica entre a
+leitura das 14:30 e a das 14:45, e as duas descrevem o mesmo tempo. Se nem a mais próxima
+estiver dentro de `TOLERANCIA_LEITURA_CLIMA_MIN` — a rodada em que a Open-Meteo caiu —, a
+coluna fica vazia, pela mesma regra da janela: clima de outra hora é pior do que a lacuna.
+
+Escrito uma vez, o bloco não é reescrito: ele descreve um instante que já passou. Enquanto
+ninguém reservou, fica vazio — é propriedade da reserva, não do horário.
 
 ### A previsão congelada no ato da reserva
 

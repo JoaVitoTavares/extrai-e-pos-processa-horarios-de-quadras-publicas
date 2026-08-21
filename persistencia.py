@@ -10,15 +10,17 @@ from config import DIRETORIO_EXTRACOES
 
 SUFIXO_CSV = "-extracoes.csv"
 COLUNAS_DE_CLIMA = ["clima", "temperatura", "umidade", "precipitacao", "velocidade_vento"]
+COLUNAS_DO_CLIMA_NA_RESERVA = [f"reserva_{coluna}" for coluna in COLUNAS_DE_CLIMA]
 COLUNAS_DA_PREVISAO = [f"previsao_{coluna}" for coluna in COLUNAS_DE_CLIMA]
+COLUNAS_CONGELADAS_NA_VIRADA = COLUNAS_DO_CLIMA_NA_RESERVA + COLUNAS_DA_PREVISAO
 COLUNAS_DA_RESERVA = ["reservado_em", "periodo_da_reserva", "antecedencia_horas"]
-COLUNAS_DA_VIRADA = COLUNAS_DA_RESERVA + COLUNAS_DA_PREVISAO
+COLUNAS_DA_VIRADA = COLUNAS_DA_RESERVA + COLUNAS_CONGELADAS_NA_VIRADA
 COLUNAS_DA_COLETA = ["periodo", "horario_fim", "status", "valor_horario", "ultima_atualizacao"]
 COLUNAS_CSV = [
     "data", "esporte", "periodo", "horario_inicio", "horario_fim", "status",
     "valor_horario", "primeira_coleta", "ultima_atualizacao",
     *COLUNAS_DA_RESERVA, "tipo_quadra", "quadra_coberta",
-    *COLUNAS_DE_CLIMA, *COLUNAS_DA_PREVISAO,
+    *COLUNAS_DE_CLIMA, *COLUNAS_DO_CLIMA_NA_RESERVA, *COLUNAS_DA_PREVISAO,
     "feriado", "evento_grande", "jogo_em_porto_alegre",
 ]
 FAIXAS_DO_DIA = ((6, "Manhã"), (12, "Tarde"), (18, "Noite"))
@@ -120,10 +122,11 @@ def _marcar_reserva(
     seguinte, ou None quando não houve virada e nada deve ser tocado. Livre para
     indisponível é a reserva acontecendo: grava quando foi feita e de quanto foi a
     antecedência. O caminho de volta é cancelamento, e apaga o que ficou. Nos dois casos
-    a previsão congelada sai junto: ela descrevia a reserva anterior, não a de agora."""
+    os dois blocos congelados saem vazios, para o tratamento os preencher pela virada
+    nova — o clima e a previsão que estavam lá descreviam a reserva anterior."""
     era_livre = status_anterior.lower() == STATUS_LIVRE
     esta_livre = status_novo.lower() == STATUS_LIVRE
-    limpas = [""] * len(COLUNAS_DA_PREVISAO)
+    limpas = [""] * len(COLUNAS_CONGELADAS_NA_VIRADA)
     if era_livre and not esta_livre:
         horas = (slot_dt - agora).total_seconds() / 3600
         return [
