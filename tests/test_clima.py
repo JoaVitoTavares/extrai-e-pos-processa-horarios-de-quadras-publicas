@@ -65,20 +65,15 @@ PAYLOAD_PREVISAO = {
     ],
 )
 def test_traduz_o_codigo_para_texto(codigo, esperado):
-    """Cada código da Open-Meteo vira a descrição em português que vai ao CSV."""
     assert weather_collector.descrever_codigo(codigo) == esperado
 
 
 @pytest.mark.parametrize("codigo", [77, 4, None, "", "abc", -1])
 def test_codigo_desconhecido_fica_vazio(codigo):
-    """Um código fora do mapa não inventa rótulo: devolve vazio, do mesmo jeito que a
-    cobertura da quadra não afirma um false que não foi observado."""
     assert weather_collector.descrever_codigo(codigo) == ""
 
 
 def test_codigo_desconhecido_ainda_e_gravado_em_bruto():
-    """A lacuna na descrição não pode virar perda de dado: o número continua na linha,
-    então um código novo da API é investigável depois."""
     linha = weather_collector._linha_de_clima({"weather_code": 77}, AGORA, 0.0, 0.0)
 
     assert linha["clima"] == ""
@@ -86,8 +81,6 @@ def test_codigo_desconhecido_ainda_e_gravado_em_bruto():
 
 
 def test_chama_a_api_com_as_coordenadas_do_config(respostas):
-    """A consulta usa a URL e as coordenadas do config, pede os sete campos atuais, fixa
-    o fuso e não fica pendurada sem timeout."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(PAYLOAD)
     weather_collector.consultar_clima()
@@ -105,7 +98,6 @@ def test_chama_a_api_com_as_coordenadas_do_config(respostas):
 
 
 def test_devolve_o_bloco_atual(respostas):
-    """Resposta bem formada entrega o bloco `current` tal como veio."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(PAYLOAD)
 
@@ -114,8 +106,6 @@ def test_devolve_o_bloco_atual(respostas):
 
 @pytest.mark.parametrize("payload", [{}, {"current": None}, {"current": []}, [], "erro"])
 def test_json_sem_o_bloco_atual_levanta_erro(respostas, payload):
-    """JSON fora do formato falha alto em vez de devolver dicionário vazio: numa coleta
-    agendada, gravar nada em silêncio custa mais caro do que quebrar."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(payload)
 
@@ -124,7 +114,6 @@ def test_json_sem_o_bloco_atual_levanta_erro(respostas, payload):
 
 
 def test_erro_http_sobe(respostas):
-    """Um 500 da Open-Meteo não é engolido: quem chamou decide o que fazer."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(PAYLOAD, erro=requests.HTTPError("500"))
 
@@ -133,8 +122,6 @@ def test_erro_http_sobe(respostas):
 
 
 def test_linha_carrega_todos_os_campos_da_api():
-    """Cada campo da API cai na sua coluna, e as coordenadas usadas na consulta vão
-    junto, para o histórico continuar legível depois que alguém editar o config."""
     linha = weather_collector._linha_de_clima(ATUAL, AGORA, -29.9128, -51.1836)
 
     assert linha["data_hora"] == "2026-08-16T16:45"
@@ -150,7 +137,6 @@ def test_linha_carrega_todos_os_campos_da_api():
 
 
 def test_cabecalho_do_csv_de_clima(tmp_path):
-    """O CSV de clima nasce com as colunas de COLUNAS_CLIMA, na ordem declarada."""
     caminho = weather_collector.salvar_leitura(ATUAL, str(tmp_path), AGORA)
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
@@ -160,7 +146,6 @@ def test_cabecalho_do_csv_de_clima(tmp_path):
 
 
 def test_cria_o_diretorio_se_nao_existir(tmp_path):
-    """A primeira coleta numa máquina nova cria o diretório, em vez de estourar."""
     destino = tmp_path / "ainda-nao-existe"
     caminho = weather_collector.salvar_leitura(ATUAL, str(destino), AGORA)
 
@@ -169,9 +154,6 @@ def test_cria_o_diretorio_se_nao_existir(tmp_path):
 
 
 def test_mesmo_balde_de_quinze_minutos_nao_duplica(tmp_path):
-    """Duas coletas dentro do mesmo balde de quinze minutos leem o mesmo instante da
-    API, então atualizam a linha em vez de repetir: o coletado_em passa a ser o da
-    segunda, e o histórico não incha com leituras idênticas."""
     weather_collector.salvar_leitura(ATUAL, str(tmp_path), AGORA)
     caminho = weather_collector.salvar_leitura(
         dict(ATUAL, temperature_2m=25.1), str(tmp_path), datetime(2026, 8, 16, 16, 58, 0)
@@ -184,8 +166,6 @@ def test_mesmo_balde_de_quinze_minutos_nao_duplica(tmp_path):
 
 
 def test_baldes_diferentes_viram_duas_linhas(tmp_path):
-    """Virado o balde, a leitura nova entra como registro próprio: é o histórico que o
-    tratamento vai consultar para achar a observação mais próxima de cada reserva."""
     weather_collector.salvar_leitura(ATUAL, str(tmp_path), AGORA)
     caminho = weather_collector.salvar_leitura(
         dict(ATUAL, time="2026-08-16T17:00"), str(tmp_path), datetime(2026, 8, 16, 17, 2, 0)
@@ -202,8 +182,6 @@ def test_arquivo_de_clima_nao_casa_com_o_glob_das_quadras():
 
 
 def test_coletar_clima_consulta_e_grava(respostas, tmp_path):
-    """A fachada que o gerenciador chama faz as duas etapas: quem orquestra não precisa
-    saber que existem uma consulta e uma gravação."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(PAYLOAD)
     caminho = weather_collector.coletar_clima(str(tmp_path), AGORA)
@@ -234,8 +212,6 @@ def test_previsao_pede_as_horas_do_horizonte_da_coleta(respostas):
 
 @pytest.mark.parametrize("payload", [{}, {"hourly": None}, {"hourly": {}}, [], "erro"])
 def test_json_sem_o_bloco_horario_levanta_erro(respostas, payload):
-    """Vale para a previsão a mesma regra da leitura atual: formato inesperado quebra
-    alto, em vez de gravar uma tabela vazia que ninguém veria faltar."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(payload)
 
@@ -244,8 +220,6 @@ def test_json_sem_o_bloco_horario_levanta_erro(respostas, payload):
 
 
 def test_previsao_vira_uma_linha_por_hora(tmp_path):
-    """O bloco `hourly` vem como uma lista por campo e é transposto em uma linha por
-    hora, com o código já traduzido — o mesmo desenho do CSV de leituras."""
     caminho = weather_collector.salvar_previsao(HORARIA, str(tmp_path), AGORA)
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
@@ -258,8 +232,6 @@ def test_previsao_vira_uma_linha_por_hora(tmp_path):
 
 
 def test_campo_que_a_api_deixar_de_mandar_vira_coluna_vazia(tmp_path):
-    """Uma variável que suma da resposta não pode derrubar a transposição inteira: a
-    coluna fica vazia e as outras horas continuam gravadas."""
     sem_vento = {chave: valor for chave, valor in HORARIA.items() if chave != "wind_speed_10m"}
     caminho = weather_collector.salvar_previsao(sem_vento, str(tmp_path), AGORA)
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
@@ -270,9 +242,6 @@ def test_campo_que_a_api_deixar_de_mandar_vira_coluna_vazia(tmp_path):
 
 
 def test_rodada_nova_substitui_a_previsao_inteira(tmp_path):
-    """A tabela de previsão não é histórico: cada rodada reescreve o arquivo, porque de
-    uma hora prevista só interessa a versão mais recente. A versão antiga que importa
-    guardar é a que o tratamento congelou na linha da reserva."""
     weather_collector.salvar_previsao(HORARIA, str(tmp_path), AGORA)
     revisada = dict(HORARIA, time=["2026-08-16T22:00"], weather_code=[95],
                     temperature_2m=[16.0], relative_humidity_2m=[95], precipitation=[8.0],
@@ -284,13 +253,10 @@ def test_rodada_nova_substitui_a_previsao_inteira(tmp_path):
 
 
 def test_arquivo_de_previsao_nao_casa_com_o_glob_das_quadras():
-    """Mesmo cuidado do arquivo de leituras: a tabela de previsão divide o diretório com
-    os CSVs de quadra e não pode ser varrida junto com eles."""
     assert not fnmatch.fnmatch(weather_collector.ARQUIVO_PREVISAO, "*" + persistencia.SUFIXO_CSV)
 
 
 def test_coletar_previsao_consulta_e_grava(respostas, tmp_path):
-    """A fachada irmã de coletar_clima também faz as duas etapas de uma vez."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(PAYLOAD_PREVISAO)
     caminho = weather_collector.coletar_previsao(str(tmp_path), AGORA)

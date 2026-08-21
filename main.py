@@ -35,9 +35,6 @@ def coletar_quadras(modo_visivel: bool = False) -> list[dict]:
 
 
 def registrar_clima() -> str | None:
-    """Coleta a leitura de clima e devolve o caminho gravado, ou None se a API falhar.
-    Uma queda da Open-Meteo não pode derrubar a execução: as quadras já foram gravadas,
-    e o tratamento sabe trabalhar com a última leitura que houver no histórico."""
     print("\n>> CLIMA (API Open-Meteo): condições atuais na arena...")
     try:
         return coletar_clima()
@@ -47,10 +44,6 @@ def registrar_clima() -> str | None:
 
 
 def registrar_previsao() -> str | None:
-    """Coleta a previsão hora a hora dos dias que a extração percorre e devolve o caminho
-    gravado, ou None se a API falhar. Vale a mesma tolerância da leitura atual: sem a
-    previsão desta rodada, a reserva detectada agora fica com a coluna vazia e a próxima
-    rodada a preenche, o que custa menos do que derrubar a execução."""
     print("\n>> PREVISÃO (API Open-Meteo): horas à frente na arena...")
     try:
         return coletar_previsao()
@@ -60,9 +53,6 @@ def registrar_previsao() -> str | None:
 
 
 def _imprimir_extracao(dados: dict) -> None:
-    """Imprime o bloco de uma quadra num período: cabeçalho com esporte e cobertura,
-    um horário por linha com 🟢 para livre e 🔴 para indisponível, e o resumo de vagas.
-    Um período que não carregou mostra só o aviso, já que não há horário para listar."""
     print("\n" + "=" * 46)
     print(f"  {dados['esporte']}  |  {dados['data']}  |  Período: {dados['periodo']}")
     if dados["quadra"]:

@@ -21,7 +21,6 @@ HOJE = date.today()
 
 @pytest.fixture(scope="module")
 def esportes_do_site():
-    """Chama a API JSON de verdade uma vez por execução do módulo."""
     return courts_collector.listar_esportes()
 
 
@@ -44,12 +43,10 @@ def pagina_no_periodo(navegador):
 
 @pytest.fixture(scope="module")
 def quadras_do_site(pagina_no_periodo):
-    """Extrai as quadras da página já carregada."""
     return courts_collector._extrair_quadras(pagina_no_periodo, ESPORTE, PERIODO, HOJE)
 
 
 def test_api_ainda_lista_esportes(esportes_do_site):
-    """A técnica sem navegador continua devolvendo uma lista de esportes."""
     assert esportes_do_site
 
 
@@ -96,8 +93,6 @@ def test_toda_quadra_tem_nome(quadras_do_site):
 
 
 def test_alguma_quadra_tem_horario(quadras_do_site):
-    """O período da noite tem horários, então PADRAO_HORARIO ainda casa com o texto do
-    slot. Nada é afirmado sobre quais horários, nem sobre estarem livres."""
     assert any(quadra["horarios"] for quadra in quadras_do_site)
 
 

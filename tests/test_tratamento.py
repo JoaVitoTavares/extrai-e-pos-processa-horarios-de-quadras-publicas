@@ -33,8 +33,6 @@ PREVISAO = {
 
 
 def quadra(nome, horarios, data=DIA):
-    """Monta o dicionário de uma quadra no formato que o coletor devolve, para os testes
-    montarem o CSV de reservas pelo mesmo caminho que a coleta real usa."""
     return {
         "coletado_em": f"{DIA}T08:00:00",
         "data": data,
@@ -50,9 +48,6 @@ def quadra(nome, horarios, data=DIA):
 
 @pytest.fixture
 def extracoes(tmp_path):
-    """Monta em tmp_path uma quadra com reserva às 20:00 e uma leitura de clima às 16:00,
-    gravadas pelos módulos de verdade — o tratamento é testado contra os arquivos que a
-    coleta produz, não contra um CSV escrito à mão."""
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre", "valor": 100.0}])],
         str(tmp_path),
@@ -63,8 +58,6 @@ def extracoes(tmp_path):
 
 
 def reservas(diretorio):
-    """Relê o CSV da quadra do teste, para as asserções olharem o arquivo gravado e não
-    um DataFrame em memória."""
     return pd.read_csv(
         diretorio / "areia-1-interna-extracoes.csv", dtype=str, keep_default_na=False
     )
@@ -96,8 +89,6 @@ def test_janela_de_quatro_horas_ate_uma_hora_antes(extracoes, agora, escreve):
 
 
 def test_rodada_mais_recente_sobrescreve(extracoes):
-    """Cada rodada dentro da janela vale mais que a anterior, então o que fica gravado é
-    a observação de uma hora antes da reserva — a mais próxima do jogo."""
     tratamento = TratamentoDeDados(str(extracoes))
     tratamento.aplicar(datetime(2026, 8, 7, 16, 0))
     weather_collector.salvar_leitura(
@@ -125,8 +116,6 @@ def test_grava_as_cinco_colunas_com_os_valores_da_leitura(extracoes):
 
 
 def test_nao_mexe_nas_colunas_da_reserva(extracoes):
-    """O tratamento escreve só o ambiente: status, preço e carimbo da coleta são do
-    coletor de quadras e não podem ser reescritos por ele."""
     antes = reservas(extracoes).loc[0]
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 17, 0))
     depois = reservas(extracoes).loc[0]
@@ -136,8 +125,6 @@ def test_nao_mexe_nas_colunas_da_reserva(extracoes):
 
 
 def test_linha_fora_da_janela_fica_intacta(extracoes):
-    """Numa mesma quadra, só as reservas da janela recebem clima: a das 23:00 continua
-    vazia enquanto a das 20:00 é preenchida."""
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "23:00", "status": "Livre"}])],
         str(extracoes),
@@ -167,8 +154,6 @@ def test_reserva_de_outro_dia_nao_entra_na_janela(extracoes):
 
 
 def test_sem_leitura_de_clima_nada_e_tocado(tmp_path):
-    """Sem histórico de clima nenhum arquivo é reescrito, nem para acrescentar coluna
-    vazia: uma execução inócua não pode aparecer como alteração."""
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])],
         str(tmp_path),
@@ -182,16 +167,12 @@ def test_sem_leitura_de_clima_nada_e_tocado(tmp_path):
 
 
 def test_leitura_velha_demais_e_ignorada(extracoes):
-    """Clima de três horas atrás não vale como observação da reserva: carimbá-lo seria
-    pior do que deixar a lacuna, então a janela passa em branco."""
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 19, 0))
 
     assert reservas(extracoes).loc[0, "clima"] == ""
 
 
 def test_leitura_futura_e_ignorada(extracoes):
-    """Uma leitura à frente do relógio indica desalinhamento de máquina, não previsão:
-    o tratamento usa a última leitura que já aconteceu."""
     weather_collector.salvar_leitura(
         dict(ATUAL, time="2026-08-07T23:00", weather_code=95),
         str(extracoes), datetime(2026, 8, 7, 16, 30),
@@ -202,8 +183,6 @@ def test_leitura_futura_e_ignorada(extracoes):
 
 
 def test_arquivo_de_clima_nao_e_tratado_como_quadra(extracoes):
-    """A tabela de clima está no mesmo diretório e não pode ser varrida junto com as
-    quadras: depois do tratamento ela continua com o seu próprio cabeçalho."""
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 17, 0))
     df = pd.read_csv(extracoes / weather_collector.ARQUIVO_CLIMA, dtype=str, keep_default_na=False)
 
@@ -211,9 +190,6 @@ def test_arquivo_de_clima_nao_e_tratado_como_quadra(extracoes):
 
 
 def reservar(diretorio, hora="20:00", quando=datetime(2026, 8, 7, 10, 0), data=DIA):
-    """Faz a quadra do teste passar de livre a indisponível, que é como a coluna
-    reservado_em nasce — pelo mesmo caminho da coleta real, e não escrevendo o carimbo
-    à mão no CSV."""
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": hora, "status": "Indisponível"}], data=data)],
         str(diretorio),
@@ -222,9 +198,6 @@ def reservar(diretorio, hora="20:00", quando=datetime(2026, 8, 7, 10, 0), data=D
 
 
 def test_clima_do_instante_da_reserva_e_congelado(extracoes):
-    """A pergunta que a coluna responde é que tempo fazia na hora em que a pessoa
-    reservou. Detectada a virada, o tratamento procura no histórico a observação daquele
-    instante e a copia para a linha, nas mesmas cinco variáveis do bloco do jogo."""
     weather_collector.salvar_leitura(
         dict(ATUAL, time="2026-08-07T10:00", weather_code=61, temperature_2m=19.8),
         str(extracoes), datetime(2026, 8, 7, 10, 0),
@@ -242,9 +215,6 @@ def test_clima_do_instante_da_reserva_e_congelado(extracoes):
 
 
 def test_clima_da_reserva_nao_e_reescrito_por_rodada_posterior(extracoes):
-    """Congelado uma vez, o bloco fica: ele descreve um instante que já passou, e a
-    observação da rodada seguinte é outro instante — o da janela do jogo, que tem as suas
-    próprias colunas e não pode empurrar esta para a frente."""
     weather_collector.salvar_leitura(
         dict(ATUAL, time="2026-08-07T10:00", weather_code=61), str(extracoes),
         datetime(2026, 8, 7, 10, 0),
@@ -274,9 +244,6 @@ def test_horario_livre_nao_recebe_o_clima_da_reserva(extracoes):
 
 
 def test_clima_da_reserva_usa_a_observacao_mais_proxima_da_virada(extracoes):
-    """A API arredonda a leitura em baldes de quinze minutos, então o balde que fechou
-    depois da reserva pode ser o mais perto dela: a reserva das 10:40 fica com a leitura
-    das 10:45, e não com a das 10:30, que está dez minutos mais longe."""
     for hora, codigo in [("10:30", 3), ("10:45", 95)]:
         weather_collector.salvar_leitura(
             dict(ATUAL, time=f"2026-08-07T{hora}", weather_code=codigo), str(extracoes),
@@ -289,9 +256,6 @@ def test_clima_da_reserva_usa_a_observacao_mais_proxima_da_virada(extracoes):
 
 
 def test_reserva_sem_observacao_por_perto_fica_sem_o_bloco(extracoes):
-    """Rodada em que a Open-Meteo caiu deixa a reserva sem observação vizinha, e a leitura
-    de horas antes não serve de substituta: a coluna fica vazia, pela mesma regra da
-    janela — clima de outra hora carimbado numa reserva é pior do que a lacuna."""
     reservar(extracoes, quando=datetime(2026, 8, 7, 19, 0))
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 19, 0))
 
@@ -299,9 +263,6 @@ def test_reserva_sem_observacao_por_perto_fica_sem_o_bloco(extracoes):
 
 
 def test_previsao_congelada_na_reserva_recem_detectada(extracoes):
-    """A reserva de dois dias antes não se explica pela observação de uma hora antes do
-    jogo: o que a pessoa viu foi a previsão. Detectada a virada, a previsão daquele
-    horário é copiada para a linha, com as mesmas cinco variáveis do bloco observado."""
     weather_collector.salvar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
     reservar(extracoes)
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 10, 0))
@@ -315,8 +276,6 @@ def test_previsao_congelada_na_reserva_recem_detectada(extracoes):
 
 
 def test_previsao_nao_e_reescrita_por_rodada_posterior(extracoes):
-    """Congelada uma vez, a previsão fica: ela responde o que se sabia do tempo na hora
-    de reservar, e uma previsão melhor feita depois já não é o que a pessoa viu."""
     weather_collector.salvar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
     reservar(extracoes)
     tratamento = TratamentoDeDados(str(extracoes))
@@ -330,9 +289,6 @@ def test_previsao_nao_e_reescrita_por_rodada_posterior(extracoes):
 
 
 def test_horario_livre_nao_recebe_previsao(extracoes):
-    """A previsão congelada é uma propriedade da reserva, não do horário: enquanto
-    ninguém reservou, a coluna fica vazia — e vazia aqui quer dizer 'não houve reserva',
-    não 'não havia previsão'."""
     weather_collector.salvar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 10, 0))
 
@@ -340,8 +296,6 @@ def test_horario_livre_nao_recebe_previsao(extracoes):
 
 
 def test_reserva_de_meia_hora_pega_a_previsao_da_hora_cheia(extracoes):
-    """A Open-Meteo prevê de hora em hora e o site vende slots de meia em meia: a reserva
-    das 21:30 usa a previsão das 21:00, a hora em que o jogo acontece."""
     weather_collector.salvar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "21:30", "status": "Livre"}])],
@@ -355,8 +309,6 @@ def test_reserva_de_meia_hora_pega_a_previsao_da_hora_cheia(extracoes):
 
 
 def test_reserva_fora_do_horizonte_da_previsao_fica_sem_coluna(extracoes):
-    """Horário que a previsão não alcança não recebe valor aproximado de outra hora: sem
-    linha correspondente na tabela, a coluna fica vazia e a lacuna se explica sozinha."""
     weather_collector.salvar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}], data="2026-08-09")],
@@ -370,8 +322,6 @@ def test_reserva_fora_do_horizonte_da_previsao_fica_sem_coluna(extracoes):
 
 
 def test_sem_previsao_o_clima_observado_continua_sendo_aplicado(extracoes):
-    """Uma queda da Open-Meteo entre as duas chamadas não pode custar a outra: sem tabela
-    de previsão, a janela de observação segue funcionando como antes."""
     reservar(extracoes)
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 17, 0))
     linha = reservas(extracoes).loc[0]
@@ -381,8 +331,6 @@ def test_sem_previsao_o_clima_observado_continua_sendo_aplicado(extracoes):
 
 
 def test_devolve_so_os_arquivos_alterados(extracoes):
-    """O gerenciador relata o que mudou, então um arquivo sem linha na janela não pode
-    entrar na lista."""
     persistencia.salvar_extracao(
         [quadra("Areia 3 - Interna", [{"hora": "23:00", "status": "Livre"}])],
         str(extracoes),

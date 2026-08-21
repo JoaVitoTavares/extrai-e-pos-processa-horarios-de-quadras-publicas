@@ -25,8 +25,6 @@ FORMATO_CARIMBO = "%Y-%m-%dT%H:%M:%S"
 
 
 def _para_datetime(texto: str, formato: str) -> datetime | None:
-    """Converte texto em datetime devolvendo None quando o formato não bate, para uma
-    linha corrompida no CSV ser ignorada em vez de derrubar o tratamento inteiro."""
     try:
         return datetime.strptime(texto, formato)
     except (TypeError, ValueError):
@@ -53,8 +51,6 @@ class TratamentoDeDados:
         horas_ate: float = HORAS_ATE_A_RESERVA,
         tolerancia_min: int = TOLERANCIA_LEITURA_CLIMA_MIN,
     ) -> None:
-        """Guarda o diretório das extrações e os limites da janela, expostos como
-        parâmetros para os testes fixarem o intervalo sem depender do config."""
         self.diretorio = diretorio
         self.horas_antes = horas_antes
         self.horas_ate = horas_ate
@@ -185,10 +181,6 @@ class TratamentoDeDados:
         return gravadas
 
     def _dentro_da_janela(self, data: str, horario_inicio: str, agora: datetime) -> bool:
-        """Diz se a reserva está no intervalo em que o clima ainda vale a pena: de
-        `horas_antes` até `horas_ate` antes do início, com as duas pontas incluídas.
-        Antes disso a observação envelheceria até o jogo; depois, o registro já entrou na
-        janela morta em que nada mais se observa."""
         inicio = _para_datetime(f"{data}T{horario_inicio}", FORMATO_DATA_HORA)
         if inicio is None:
             return False

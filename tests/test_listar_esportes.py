@@ -10,7 +10,6 @@ ESPORTES = ["Beach Tennis", "Futebol de salão", "Grama 5", "Grama 7", "Handebol
 
 
 def test_devolve_a_lista_do_json(respostas):
-    """Resposta bem formada entrega a lista de esportes tal como veio."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([{"data": {"esportes_list_text": ESPORTES}}])
 
@@ -18,7 +17,6 @@ def test_devolve_a_lista_do_json(respostas):
 
 
 def test_chama_a_api_com_a_arena_e_timeout(respostas):
-    """A chamada aponta para a arena certa e não fica pendurada sem timeout."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([{"data": {"esportes_list_text": ESPORTES}}])
     courts_collector.listar_esportes()
@@ -30,8 +28,6 @@ def test_chama_a_api_com_a_arena_e_timeout(respostas):
 
 
 def test_propaga_erro_http(respostas):
-    """Erro HTTP sobe em vez de virar lista vazia, senão o cron gravaria nada em
-    silêncio e o buraco no dataset só apareceria semanas depois."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(None, erro=requests.HTTPError("500"))
 
@@ -49,8 +45,6 @@ def test_propaga_erro_http(respostas):
     ],
 )
 def test_json_em_formato_inesperado_falha_explicitamente(respostas, payload):
-    """Formato diferente do esperado levanta ValueError dizendo o que houve, em vez de
-    estourar um KeyError cru ou devolver [] mudo."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(payload)
 
@@ -59,8 +53,6 @@ def test_json_em_formato_inesperado_falha_explicitamente(respostas, payload):
 
 
 def test_esportes_alvo_filtra_os_tipos_de_interesse():
-    """A coleta percorre os quatro tipos de quadra que interessam ao TCC; Beach Tennis e
-    Handebol existem no site mas ficam de fora."""
     assert courts_collector.esportes_alvo(ESPORTES) == [
         "Futebol de salão", "Grama 5", "Grama 7", "Vôlei de praia"
     ]
@@ -81,14 +73,10 @@ def test_esportes_alvo_devolve_o_nome_como_o_site_escreve():
     ],
 )
 def test_esportes_alvo_ignora_o_que_nao_interessa(do_site, esperado):
-    """Um site sem alguns dos tipos devolve só os presentes, sem estourar."""
     assert courts_collector.esportes_alvo(do_site) == esperado
 
 
 def test_tipos_ausentes_lista_o_que_sumiu_do_site():
-    """Com os quatro tipos presentes não há aviso; faltando um, ele é nomeado — é assim
-    que uma quadra que sai do ar aparece na execução em vez de virar lacuna silenciosa
-    no histórico."""
     assert courts_collector.tipos_ausentes(courts_collector.TIPOS_QUADRA) == []
     assert courts_collector.tipos_ausentes(["Grama 5", "Grama 7"]) == [
         "Vôlei de praia", "Futebol de salão"
@@ -96,6 +84,4 @@ def test_tipos_ausentes_lista_o_que_sumiu_do_site():
 
 
 def test_tipos_ausentes_reconhece_o_nome_sem_acento():
-    """O aviso não pode disparar só porque o site escreveu 'Volei' sem acento: o tipo é
-    canonizado antes da comparação."""
     assert "Vôlei de praia" not in courts_collector.tipos_ausentes(["Volei de praia"])
