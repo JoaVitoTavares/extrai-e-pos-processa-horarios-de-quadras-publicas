@@ -26,9 +26,6 @@ ESPERA_CALENDARIO_MS = 3_000
 
 
 def _quadra_coberta(nome: str | None) -> str:
-    """Classifica a quadra pelo nome: interna ou coberta é 'true', externa ou descoberta
-    é 'false'. Descoberta é testada primeiro porque contém 'coberta'. Sem nome ou sem
-    palavra-chave devolve vazio, para não afirmar um 'false' que não foi observado."""
     if not nome:
         return ""
     if PADRAO_DESCOBERTA.search(nome):
@@ -51,10 +48,6 @@ def _tipo_quadra(esporte: str, nome_quadra: str | None) -> str:
 
 
 def listar_esportes() -> list[str]:
-    """Lista os esportes chamando a API JSON diretamente, sem abrir navegador. Um JSON
-    fora do formato esperado levanta ValueError em vez de estourar um KeyError cru ou
-    devolver lista vazia: num coletor agendado, gravar nada em silêncio custa mais caro
-    do que falhar alto."""
     resposta = requests.get(
         API_INIT,
         params={"location": URL_ARENA},
@@ -70,26 +63,16 @@ def listar_esportes() -> list[str]:
 
 
 def esportes_alvo(esportes_do_site: list[str]) -> list[str]:
-    """Seleciona, entre os esportes que o site lista hoje, os que correspondem aos tipos
-    de quadra de interesse — os demais, como Beach Tennis e Handebol, ficam de fora.
-    Devolve o nome como o site escreve, que é o que o clique na tela precisa, e ignora
-    acento e caixa apenas na comparação."""
     procurados = {sem_acento(tipo).casefold() for tipo in TIPOS_QUADRA}
     return [nome for nome in esportes_do_site if sem_acento(nome).casefold() in procurados]
 
 
 def tipos_ausentes(alvos: list[str]) -> list[str]:
-    """Diz quais dos tipos de quadra de interesse não apareceram entre os esportes que o
-    site lista hoje. Serve de aviso na execução: um tipo que some do site sem ninguém
-    notar viraria uma lacuna silenciosa no histórico, e não um erro."""
     encontrados = {_tipo_quadra(alvo, None) for alvo in alvos}
     return [tipo for tipo in TIPOS_QUADRA if tipo not in encontrados]
 
 
 def dias_de_coleta(hoje: date, dias_a_frente: int = DIAS_A_FRENTE) -> list[date]:
-    """Lista os dias de uma rodada: hoje e os `dias_a_frente` seguintes. Coletar além do
-    dia atual é o que permite ver um horário livre virar indisponível — a reserva feita
-    com antecedência, que numa coleta só de hoje já chega ocupada e sem hora de origem."""
     return [hoje + timedelta(days=n) for n in range(dias_a_frente + 1)]
 
 
@@ -217,9 +200,6 @@ def _extrair_quadras(pagina, esporte: str, periodo: str, dia: date) -> list[dict
 
 
 def _preco_para_float(bruto: str) -> float | None:
-    """Converte um preço em texto (ex.: 'R$ 1.500,00' ou 'R$150') para float,
-    descartando o que não for dígito ou vírgula e tratando o ponto como separador
-    de milhar e a vírgula como decimal. Retorna None se não sobrar número."""
     limpo = re.sub(r"[^\d,]", "", bruto).replace(",", ".")
     try:
         return float(limpo)
@@ -228,9 +208,6 @@ def _preco_para_float(bruto: str) -> float | None:
 
 
 def _preco_do_slot(textos: list[str]) -> float | None:
-    """Escolhe o preço de um slot a partir dos textos das opções de duração (ex.:
-    '60 min. R$150'): prefere sempre a opção de 60 min e, na falta dela, usa a
-    primeira opção com preço. Retorna o valor em float ou None."""
     candidatos = []
     for texto in textos:
         preco = re.search(r"R\$\s*([\d.,]+)", texto)
