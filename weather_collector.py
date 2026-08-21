@@ -5,14 +5,7 @@ import pandas as pd
 import requests
 from datetime import datetime
 
-from config import (
-    API_CLIMA,
-    DIAS_A_FRENTE,
-    DIRETORIO_EXTRACOES,
-    FUSO_HORARIO,
-    LATITUDE,
-    LONGITUDE,
-)
+from config import API_CLIMA, DIAS_A_FRENTE, DIRETORIO_EXTRACOES, FUSO_HORARIO
 from persistencia import anexar_linha
 
 CAMPOS_ATUAIS = (
@@ -66,9 +59,7 @@ def descrever_codigo(codigo) -> str:
         return ""
 
 
-def consultar_clima(
-    latitude: float = LATITUDE, longitude: float = LONGITUDE, timeout: int = 30
-) -> dict:
+def consultar_clima(latitude: float, longitude: float, timeout: int = 30) -> dict:
     resposta = requests.get(
         API_CLIMA,
         params={
@@ -106,10 +97,10 @@ def _linha_de_clima(atual: dict, agora: datetime, latitude: float, longitude: fl
 
 def salvar_leitura(
     atual: dict,
+    latitude: float,
+    longitude: float,
     diretorio: str = DIRETORIO_EXTRACOES,
     agora=None,
-    latitude: float = LATITUDE,
-    longitude: float = LONGITUDE,
 ) -> str:
     agora = agora or datetime.now()
     if diretorio:
@@ -120,13 +111,17 @@ def salvar_leitura(
     return caminho_csv
 
 
-def coletar_clima(diretorio: str = DIRETORIO_EXTRACOES, agora=None) -> str:
-    return salvar_leitura(consultar_clima(), diretorio, agora)
+def coletar_clima(
+    latitude: float, longitude: float, diretorio: str = DIRETORIO_EXTRACOES, agora=None
+) -> str:
+    return salvar_leitura(
+        consultar_clima(latitude, longitude), latitude, longitude, diretorio, agora
+    )
 
 
 def consultar_previsao(
-    latitude: float = LATITUDE,
-    longitude: float = LONGITUDE,
+    latitude: float,
+    longitude: float,
     dias_a_frente: int = DIAS_A_FRENTE,
     timeout: int = 30,
 ) -> dict:
@@ -177,10 +172,10 @@ def _linhas_de_previsao(horas: dict, agora: datetime, latitude: float, longitude
 
 def salvar_previsao(
     horas: dict,
+    latitude: float,
+    longitude: float,
     diretorio: str = DIRETORIO_EXTRACOES,
     agora=None,
-    latitude: float = LATITUDE,
-    longitude: float = LONGITUDE,
 ) -> str:
     """Reescreve por inteiro o CSV de previsão dentro de `diretorio`. Aqui não há upsert
     nem histórico: a previsão de uma hora só vale a mais recente, e a versão que importa
@@ -197,5 +192,9 @@ def salvar_previsao(
     return caminho_csv
 
 
-def coletar_previsao(diretorio: str = DIRETORIO_EXTRACOES, agora=None) -> str:
-    return salvar_previsao(consultar_previsao(), diretorio, agora)
+def coletar_previsao(
+    latitude: float, longitude: float, diretorio: str = DIRETORIO_EXTRACOES, agora=None
+) -> str:
+    return salvar_previsao(
+        consultar_previsao(latitude, longitude), latitude, longitude, diretorio, agora
+    )

@@ -16,7 +16,9 @@ COLUNAS_CONGELADAS_NA_VIRADA = COLUNAS_DO_CLIMA_NA_RESERVA + COLUNAS_DA_PREVISAO
 COLUNAS_DA_RESERVA = ["reservado_em", "periodo_da_reserva", "antecedencia_horas"]
 COLUNAS_DA_VIRADA = COLUNAS_DA_RESERVA + COLUNAS_CONGELADAS_NA_VIRADA
 COLUNAS_DA_COLETA = ["periodo", "horario_fim", "status", "valor_horario", "ultima_atualizacao"]
+COLUNAS_DA_ARENA = ["arena", "cidade"]
 COLUNAS_CSV = [
+    *COLUNAS_DA_ARENA,
     "data", "esporte", "periodo", "horario_inicio", "horario_fim", "status",
     "valor_horario", "primeira_coleta", "ultima_atualizacao",
     *COLUNAS_DA_RESERVA, "tipo_quadra", "quadra_coberta",
@@ -71,12 +73,15 @@ def anexar_linha(caminho_csv: str, linha: dict, colunas: list[str], chave: str) 
     df.to_csv(caminho_csv, index=False)
 
 
-def _achatar_linhas(resultados: list[dict], agora: datetime) -> list[dict]:
+def _achatar_linhas(
+    resultados: list[dict], agora: datetime, arena: str = "", cidade: str = ""
+) -> list[dict]:
     """Achata as quadras coletadas em linhas de reserva prontas para o CSV, pulando as
     que vieram com aviso, derivando horario_fim (início + 1h) e colapsando horários
     repetidos na mesma extração — de cada slot fica sempre o último. A chave de colapso
     inclui a data e a quadra: a rodada percorre vários dias, e o mesmo horário em quadras
-    ou dias diferentes não pode virar uma linha só."""
+    ou dias diferentes não pode virar uma linha só. Arena e cidade vêm de fora porque
+    identificam o site coletado, e não a quadra."""
     por_chave = {}
     for quadra in resultados:
         if quadra["aviso"]:
@@ -86,6 +91,8 @@ def _achatar_linhas(resultados: list[dict], agora: datetime) -> list[dict]:
             inicio = datetime.strptime(h["hora"], "%H:%M")
             fim = (inicio + timedelta(hours=1)).strftime("%H:%M")
             por_chave[(data, quadra["quadra"], h["hora"])] = {
+                "arena": arena,
+                "cidade": cidade,
                 "data": data,
                 "esporte": quadra["esporte"],
                 "periodo": quadra["periodo"],
@@ -136,7 +143,9 @@ def _gravar_csv(caminho_csv: str, linhas: list[dict], agora: datetime) -> None:
     horario_inicio): um slot novo é sempre inserido, carimbando `primeira_coleta`; um
     slot já existente só é atualizado enquanto `agora < horario_inicio`, congelando
     quando o horário chega ou passa. É na atualização que a virada de status é vista, e
-    daí saem as colunas da reserva. A coluna auxiliar `quadra` cai fora no reindex."""
+    daí saem as colunas da reserva. Arena e cidade só sobrescrevem quando vêm
+    preenchidas: a rodada em que o geocodificador falhou não pode apagar a cidade que a
+    anterior descobriu. A coluna auxiliar `quadra` cai fora no reindex."""
     if os.path.exists(caminho_csv):
         df = pd.read_csv(caminho_csv, dtype=str, keep_default_na=False)
     else:
@@ -159,6 +168,9 @@ def _gravar_csv(caminho_csv: str, linhas: list[dict], agora: datetime) -> None:
                 df.loc[existente, "status"].iloc[0], linha["status"], slot_dt, agora
             )
             df.loc[existente, COLUNAS_DA_COLETA] = [linha[coluna] for coluna in COLUNAS_DA_COLETA]
+            conhecidas = [coluna for coluna in COLUNAS_DA_ARENA if linha[coluna]]
+            if conhecidas:
+                df.loc[existente, conhecidas] = [linha[coluna] for coluna in conhecidas]
             if reserva is not None:
                 df.loc[existente, COLUNAS_DA_VIRADA] = reserva
 
@@ -166,14 +178,20 @@ def _gravar_csv(caminho_csv: str, linhas: list[dict], agora: datetime) -> None:
 
 
 def salvar_extracao(
-    resultados: list[dict], diretorio: str = DIRETORIO_EXTRACOES, agora=None
+    resultados: list[dict],
+    diretorio: str = DIRETORIO_EXTRACOES,
+    agora=None,
+    arena: str = "",
+    cidade: str = "",
 ) -> list[str]:
     """Distribui a extração em um CSV por quadra, dentro de `diretorio`, criado junto com
     o primeiro arquivo. É o que garante a unicidade do horário: o 17:00 de uma quadra
-    nunca disputa linha com o 17:00 de outra. Devolve os caminhos gravados."""
+    nunca disputa linha com o 17:00 de outra. O diretório é de uma arena só, porque duas
+    arenas podem ter quadras de mesmo nome e o slug as faria disputar arquivo. Devolve os
+    caminhos gravados."""
     agora = agora or datetime.now()
     por_quadra = {}
-    for linha in _achatar_linhas(resultados, agora):
+    for linha in _achatar_linhas(resultados, agora, arena, cidade):
         por_quadra.setdefault(linha["quadra"], []).append(linha)
 
     if por_quadra and diretorio:

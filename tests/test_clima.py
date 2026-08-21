@@ -14,6 +14,7 @@ import weather_collector
 from conftest import RespostaFalsa
 
 AGORA = datetime(2026, 8, 16, 16, 47, 0)
+LATITUDE, LONGITUDE = -29.9048885, -51.1612496
 ATUAL = {
     "time": "2026-08-16T16:45",
     "interval": 900,
@@ -80,15 +81,18 @@ def test_codigo_desconhecido_ainda_e_gravado_em_bruto():
     assert linha["codigo_clima"] == 77
 
 
-def test_chama_a_api_com_as_coordenadas_do_config(respostas):
+def test_chama_a_api_nas_coordenadas_recebidas(respostas):
+    """A consulta usa a URL do config e as coordenadas que vêm de fora — as da arena que
+    está sendo coletada, e não um ponto fixo —, pede os sete campos atuais, fixa o fuso e
+    não fica pendurada sem timeout."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(PAYLOAD)
-    weather_collector.consultar_clima()
+    weather_collector.consultar_clima(LATITUDE, LONGITUDE)
 
     url, kwargs = chamadas[0]
     assert url == config.API_CLIMA
-    assert kwargs["params"]["latitude"] == config.LATITUDE
-    assert kwargs["params"]["longitude"] == config.LONGITUDE
+    assert kwargs["params"]["latitude"] == LATITUDE
+    assert kwargs["params"]["longitude"] == LONGITUDE
     assert kwargs["params"]["timezone"] == config.FUSO_HORARIO
     assert kwargs["params"]["current"].split(",") == [
         "temperature_2m", "apparent_temperature", "relative_humidity_2m",
@@ -101,7 +105,7 @@ def test_devolve_o_bloco_atual(respostas):
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(PAYLOAD)
 
-    assert weather_collector.consultar_clima() == ATUAL
+    assert weather_collector.consultar_clima(LATITUDE, LONGITUDE) == ATUAL
 
 
 @pytest.mark.parametrize("payload", [{}, {"current": None}, {"current": []}, [], "erro"])
@@ -110,7 +114,7 @@ def test_json_sem_o_bloco_atual_levanta_erro(respostas, payload):
     get_falso.resposta = RespostaFalsa(payload)
 
     with pytest.raises(ValueError, match="formato inesperado"):
-        weather_collector.consultar_clima()
+        weather_collector.consultar_clima(LATITUDE, LONGITUDE)
 
 
 def test_erro_http_sobe(respostas):
@@ -118,7 +122,7 @@ def test_erro_http_sobe(respostas):
     get_falso.resposta = RespostaFalsa(PAYLOAD, erro=requests.HTTPError("500"))
 
     with pytest.raises(requests.HTTPError):
-        weather_collector.consultar_clima()
+        weather_collector.consultar_clima(LATITUDE, LONGITUDE)
 
 
 def test_linha_carrega_todos_os_campos_da_api():
@@ -137,7 +141,7 @@ def test_linha_carrega_todos_os_campos_da_api():
 
 
 def test_cabecalho_do_csv_de_clima(tmp_path):
-    caminho = weather_collector.salvar_leitura(ATUAL, str(tmp_path), AGORA)
+    caminho = weather_collector.salvar_leitura(ATUAL, LATITUDE, LONGITUDE, str(tmp_path), AGORA)
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
     assert list(df.columns) == weather_collector.COLUNAS_CLIMA
@@ -147,16 +151,17 @@ def test_cabecalho_do_csv_de_clima(tmp_path):
 
 def test_cria_o_diretorio_se_nao_existir(tmp_path):
     destino = tmp_path / "ainda-nao-existe"
-    caminho = weather_collector.salvar_leitura(ATUAL, str(destino), AGORA)
+    caminho = weather_collector.salvar_leitura(ATUAL, LATITUDE, LONGITUDE, str(destino), AGORA)
 
     assert destino.is_dir()
     assert os.path.exists(caminho)
 
 
 def test_mesmo_balde_de_quinze_minutos_nao_duplica(tmp_path):
-    weather_collector.salvar_leitura(ATUAL, str(tmp_path), AGORA)
+    weather_collector.salvar_leitura(ATUAL, LATITUDE, LONGITUDE, str(tmp_path), AGORA)
     caminho = weather_collector.salvar_leitura(
-        dict(ATUAL, temperature_2m=25.1), str(tmp_path), datetime(2026, 8, 16, 16, 58, 0)
+        dict(ATUAL, temperature_2m=25.1), LATITUDE, LONGITUDE, str(tmp_path),
+        datetime(2026, 8, 16, 16, 58, 0),
     )
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
@@ -166,9 +171,10 @@ def test_mesmo_balde_de_quinze_minutos_nao_duplica(tmp_path):
 
 
 def test_baldes_diferentes_viram_duas_linhas(tmp_path):
-    weather_collector.salvar_leitura(ATUAL, str(tmp_path), AGORA)
+    weather_collector.salvar_leitura(ATUAL, LATITUDE, LONGITUDE, str(tmp_path), AGORA)
     caminho = weather_collector.salvar_leitura(
-        dict(ATUAL, time="2026-08-16T17:00"), str(tmp_path), datetime(2026, 8, 16, 17, 2, 0)
+        dict(ATUAL, time="2026-08-16T17:00"), LATITUDE, LONGITUDE, str(tmp_path),
+        datetime(2026, 8, 16, 17, 2, 0),
     )
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
@@ -184,7 +190,7 @@ def test_arquivo_de_clima_nao_casa_com_o_glob_das_quadras():
 def test_coletar_clima_consulta_e_grava(respostas, tmp_path):
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(PAYLOAD)
-    caminho = weather_collector.coletar_clima(str(tmp_path), AGORA)
+    caminho = weather_collector.coletar_clima(LATITUDE, LONGITUDE, str(tmp_path), AGORA)
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
     assert os.path.basename(caminho) == weather_collector.ARQUIVO_CLIMA
@@ -197,7 +203,7 @@ def test_previsao_pede_as_horas_do_horizonte_da_coleta(respostas):
     conta junto com os dias à frente, daí o +1."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(PAYLOAD_PREVISAO)
-    weather_collector.consultar_previsao()
+    weather_collector.consultar_previsao(LATITUDE, LONGITUDE)
 
     url, kwargs = chamadas[0]
     assert url == config.API_CLIMA
@@ -216,11 +222,11 @@ def test_json_sem_o_bloco_horario_levanta_erro(respostas, payload):
     get_falso.resposta = RespostaFalsa(payload)
 
     with pytest.raises(ValueError, match="formato inesperado"):
-        weather_collector.consultar_previsao()
+        weather_collector.consultar_previsao(LATITUDE, LONGITUDE)
 
 
 def test_previsao_vira_uma_linha_por_hora(tmp_path):
-    caminho = weather_collector.salvar_previsao(HORARIA, str(tmp_path), AGORA)
+    caminho = weather_collector.salvar_previsao(HORARIA, LATITUDE, LONGITUDE, str(tmp_path), AGORA)
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
     assert list(df.columns) == weather_collector.COLUNAS_PREVISAO
@@ -233,7 +239,7 @@ def test_previsao_vira_uma_linha_por_hora(tmp_path):
 
 def test_campo_que_a_api_deixar_de_mandar_vira_coluna_vazia(tmp_path):
     sem_vento = {chave: valor for chave, valor in HORARIA.items() if chave != "wind_speed_10m"}
-    caminho = weather_collector.salvar_previsao(sem_vento, str(tmp_path), AGORA)
+    caminho = weather_collector.salvar_previsao(sem_vento, LATITUDE, LONGITUDE, str(tmp_path), AGORA)
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
     assert len(df) == 2
@@ -242,11 +248,11 @@ def test_campo_que_a_api_deixar_de_mandar_vira_coluna_vazia(tmp_path):
 
 
 def test_rodada_nova_substitui_a_previsao_inteira(tmp_path):
-    weather_collector.salvar_previsao(HORARIA, str(tmp_path), AGORA)
+    weather_collector.salvar_previsao(HORARIA, LATITUDE, LONGITUDE, str(tmp_path), AGORA)
     revisada = dict(HORARIA, time=["2026-08-16T22:00"], weather_code=[95],
                     temperature_2m=[16.0], relative_humidity_2m=[95], precipitation=[8.0],
                     precipitation_probability=[90], wind_speed_10m=[30.0])
-    caminho = weather_collector.salvar_previsao(revisada, str(tmp_path), AGORA)
+    caminho = weather_collector.salvar_previsao(revisada, LATITUDE, LONGITUDE, str(tmp_path), AGORA)
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
     assert list(df["data_hora"]) == ["2026-08-16T22:00"]
@@ -259,7 +265,7 @@ def test_arquivo_de_previsao_nao_casa_com_o_glob_das_quadras():
 def test_coletar_previsao_consulta_e_grava(respostas, tmp_path):
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(PAYLOAD_PREVISAO)
-    caminho = weather_collector.coletar_previsao(str(tmp_path), AGORA)
+    caminho = weather_collector.coletar_previsao(LATITUDE, LONGITUDE, str(tmp_path), AGORA)
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
     assert os.path.basename(caminho) == weather_collector.ARQUIVO_PREVISAO

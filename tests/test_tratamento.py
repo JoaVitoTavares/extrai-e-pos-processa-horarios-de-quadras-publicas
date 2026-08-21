@@ -10,6 +10,7 @@ import weather_collector
 from tratamento import TratamentoDeDados
 
 DIA = "2026-08-07"
+COORDENADAS = (-29.9128, -51.1836)
 RESERVA = datetime(2026, 8, 7, 20, 0, 0)
 ATUAL = {
     "time": "2026-08-07T16:00",
@@ -30,6 +31,14 @@ PREVISAO = {
     "weather_code": [63, 0, 0],
     "wind_speed_10m": [19.4, 12.0, 9.8],
 }
+
+
+def gravar_leitura(atual, diretorio, agora):
+    return weather_collector.salvar_leitura(atual, *COORDENADAS, diretorio, agora)
+
+
+def gravar_previsao(horas, diretorio, agora):
+    return weather_collector.salvar_previsao(horas, *COORDENADAS, diretorio, agora)
 
 
 def quadra(nome, horarios, data=DIA):
@@ -53,7 +62,7 @@ def extracoes(tmp_path):
         str(tmp_path),
         datetime(2026, 8, 7, 8, 0, 0),
     )
-    weather_collector.salvar_leitura(ATUAL, str(tmp_path), datetime(2026, 8, 7, 16, 1, 0))
+    gravar_leitura(ATUAL, str(tmp_path), datetime(2026, 8, 7, 16, 1, 0))
     return tmp_path
 
 
@@ -81,7 +90,7 @@ def test_janela_de_quatro_horas_ate_uma_hora_antes(extracoes, agora, escreve):
     """A reserva das 20:00 só recebe clima entre 16:00 e 19:00, com as duas pontas
     incluídas: antes disso a observação envelheceria até o jogo, depois o registro já
     entrou na janela morta. A leitura usada é sempre a mais recente disponível."""
-    weather_collector.salvar_leitura(dict(ATUAL, time=agora.strftime("%Y-%m-%dT%H:%M")),
+    gravar_leitura(dict(ATUAL, time=agora.strftime("%Y-%m-%dT%H:%M")),
                                      str(extracoes), agora)
     TratamentoDeDados(str(extracoes)).aplicar(agora)
 
@@ -91,7 +100,7 @@ def test_janela_de_quatro_horas_ate_uma_hora_antes(extracoes, agora, escreve):
 def test_rodada_mais_recente_sobrescreve(extracoes):
     tratamento = TratamentoDeDados(str(extracoes))
     tratamento.aplicar(datetime(2026, 8, 7, 16, 0))
-    weather_collector.salvar_leitura(
+    gravar_leitura(
         dict(ATUAL, time="2026-08-07T19:00", weather_code=65, temperature_2m=15.2),
         str(extracoes), datetime(2026, 8, 7, 19, 0),
     )
@@ -173,7 +182,7 @@ def test_leitura_velha_demais_e_ignorada(extracoes):
 
 
 def test_leitura_futura_e_ignorada(extracoes):
-    weather_collector.salvar_leitura(
+    gravar_leitura(
         dict(ATUAL, time="2026-08-07T23:00", weather_code=95),
         str(extracoes), datetime(2026, 8, 7, 16, 30),
     )
@@ -198,7 +207,7 @@ def reservar(diretorio, hora="20:00", quando=datetime(2026, 8, 7, 10, 0), data=D
 
 
 def test_clima_do_instante_da_reserva_e_congelado(extracoes):
-    weather_collector.salvar_leitura(
+    gravar_leitura(
         dict(ATUAL, time="2026-08-07T10:00", weather_code=61, temperature_2m=19.8),
         str(extracoes), datetime(2026, 8, 7, 10, 0),
     )
@@ -215,7 +224,7 @@ def test_clima_do_instante_da_reserva_e_congelado(extracoes):
 
 
 def test_clima_da_reserva_nao_e_reescrito_por_rodada_posterior(extracoes):
-    weather_collector.salvar_leitura(
+    gravar_leitura(
         dict(ATUAL, time="2026-08-07T10:00", weather_code=61), str(extracoes),
         datetime(2026, 8, 7, 10, 0),
     )
@@ -223,7 +232,7 @@ def test_clima_da_reserva_nao_e_reescrito_por_rodada_posterior(extracoes):
     tratamento = TratamentoDeDados(str(extracoes))
     tratamento.aplicar(datetime(2026, 8, 7, 10, 0))
 
-    weather_collector.salvar_leitura(
+    gravar_leitura(
         dict(ATUAL, time="2026-08-07T17:00", weather_code=0), str(extracoes),
         datetime(2026, 8, 7, 17, 0),
     )
@@ -245,7 +254,7 @@ def test_horario_livre_nao_recebe_o_clima_da_reserva(extracoes):
 
 def test_clima_da_reserva_usa_a_observacao_mais_proxima_da_virada(extracoes):
     for hora, codigo in [("10:30", 3), ("10:45", 95)]:
-        weather_collector.salvar_leitura(
+        gravar_leitura(
             dict(ATUAL, time=f"2026-08-07T{hora}", weather_code=codigo), str(extracoes),
             datetime(2026, 8, 7, 10, 45),
         )
@@ -263,7 +272,7 @@ def test_reserva_sem_observacao_por_perto_fica_sem_o_bloco(extracoes):
 
 
 def test_previsao_congelada_na_reserva_recem_detectada(extracoes):
-    weather_collector.salvar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
+    gravar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
     reservar(extracoes)
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 10, 0))
     linha = reservas(extracoes).loc[0]
@@ -276,27 +285,27 @@ def test_previsao_congelada_na_reserva_recem_detectada(extracoes):
 
 
 def test_previsao_nao_e_reescrita_por_rodada_posterior(extracoes):
-    weather_collector.salvar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
+    gravar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
     reservar(extracoes)
     tratamento = TratamentoDeDados(str(extracoes))
     tratamento.aplicar(datetime(2026, 8, 7, 10, 0))
 
     revisada = dict(PREVISAO, weather_code=[0, 0, 0], temperature_2m=[30.0, 30.0, 30.0])
-    weather_collector.salvar_previsao(revisada, str(extracoes), datetime(2026, 8, 7, 17, 0))
+    gravar_previsao(revisada, str(extracoes), datetime(2026, 8, 7, 17, 0))
     tratamento.aplicar(datetime(2026, 8, 7, 17, 0))
 
     assert reservas(extracoes).loc[0, "previsao_clima"] == "Chuva moderada"
 
 
 def test_horario_livre_nao_recebe_previsao(extracoes):
-    weather_collector.salvar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
+    gravar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 10, 0))
 
     assert reservas(extracoes).loc[0, "previsao_clima"] == ""
 
 
 def test_reserva_de_meia_hora_pega_a_previsao_da_hora_cheia(extracoes):
-    weather_collector.salvar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
+    gravar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "21:30", "status": "Livre"}])],
         str(extracoes), datetime(2026, 8, 7, 9, 0),
@@ -309,7 +318,7 @@ def test_reserva_de_meia_hora_pega_a_previsao_da_hora_cheia(extracoes):
 
 
 def test_reserva_fora_do_horizonte_da_previsao_fica_sem_coluna(extracoes):
-    weather_collector.salvar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
+    gravar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}], data="2026-08-09")],
         str(extracoes), datetime(2026, 8, 7, 9, 0),

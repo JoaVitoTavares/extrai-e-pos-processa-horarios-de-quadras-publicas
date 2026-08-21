@@ -6,24 +6,40 @@ import requests
 import courts_collector
 from conftest import RespostaFalsa
 
+ARENA = "https://webarena.app/arena/sp-sports"
 ESPORTES = ["Beach Tennis", "Futebol de salão", "Grama 5", "Grama 7", "Handebol", "Vôlei de praia"]
+
+
+@pytest.mark.parametrize(
+    "url_arena, esperado",
+    [
+        ("https://webarena.app/arena/sp-sports", "https://webarena.app/api/1.1/init/data"),
+        ("https://webarena.app/arena/outra-quadra/", "https://webarena.app/api/1.1/init/data"),
+        ("https://outro-site.com.br/arena/x", "https://outro-site.com.br/api/1.1/init/data"),
+    ],
+)
+def test_api_json_sai_da_url_da_arena(url_arena, esperado):
+    """O endereço da API é derivado da própria arena, e não fixado no config: o caminho é
+    o mesmo em todas — é o mesmo aplicativo Bubble por trás —, mas o domínio não precisa
+    ser, e é isso que permite a lista de sites crescer para fora do webarena.app."""
+    assert courts_collector.api_init_de(url_arena) == esperado
 
 
 def test_devolve_a_lista_do_json(respostas):
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([{"data": {"esportes_list_text": ESPORTES}}])
 
-    assert courts_collector.listar_esportes() == ESPORTES
+    assert courts_collector.listar_esportes(ARENA) == ESPORTES
 
 
 def test_chama_a_api_com_a_arena_e_timeout(respostas):
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([{"data": {"esportes_list_text": ESPORTES}}])
-    courts_collector.listar_esportes()
+    courts_collector.listar_esportes(ARENA)
 
     url, kwargs = chamadas[0]
-    assert url == courts_collector.API_INIT
-    assert kwargs["params"] == {"location": courts_collector.URL_ARENA}
+    assert url == "https://webarena.app/api/1.1/init/data"
+    assert kwargs["params"] == {"location": ARENA}
     assert kwargs["timeout"] > 0
 
 
@@ -32,7 +48,7 @@ def test_propaga_erro_http(respostas):
     get_falso.resposta = RespostaFalsa(None, erro=requests.HTTPError("500"))
 
     with pytest.raises(requests.HTTPError):
-        courts_collector.listar_esportes()
+        courts_collector.listar_esportes(ARENA)
 
 
 @pytest.mark.parametrize(
@@ -49,7 +65,7 @@ def test_json_em_formato_inesperado_falha_explicitamente(respostas, payload):
     get_falso.resposta = RespostaFalsa(payload)
 
     with pytest.raises(ValueError, match="formato inesperado"):
-        courts_collector.listar_esportes()
+        courts_collector.listar_esportes(ARENA)
 
 
 def test_esportes_alvo_filtra_os_tipos_de_interesse():

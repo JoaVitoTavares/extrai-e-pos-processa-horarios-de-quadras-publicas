@@ -4,7 +4,7 @@ set -uo pipefail
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIRETORIO_LOGS="$RAIZ/.logs"
 ARQUIVO_TRAVA="/tmp/extrator-sp-sports.lock"
-LIMITE_DE_EXECUCAO="5m"
+LIMITE_DE_EXECUCAO="12m"
 DIAS_DE_LOG=14
 
 export HOME="${HOME:-/home/tavares}"

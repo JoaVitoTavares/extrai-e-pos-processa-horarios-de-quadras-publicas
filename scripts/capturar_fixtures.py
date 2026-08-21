@@ -9,8 +9,10 @@ from playwright.sync_api import sync_playwright
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RAIZ)
 
+import config
 import courts_collector
 
+ARENA = config.ARENAS[0]["url"]
 DIRETORIO_FIXTURES = os.path.join(RAIZ, "tests", "fixtures")
 SELETOR_CONTAINER = "div.bubble-rg-flex-row"
 CAPTURAS = [
@@ -22,7 +24,7 @@ CAPTURAS = [
 def capturar(pagina, esporte: str, periodo: str) -> str:
     """Navega até o esporte, o dia de hoje e o período pedidos e devolve o outerHTML do
     RepeatingGroup de quadras, que é o trecho que as fixtures precisam congelar."""
-    pagina.goto(courts_collector.URL_ARENA, wait_until="networkidle", timeout=60_000)
+    pagina.goto(ARENA, wait_until="networkidle", timeout=60_000)
     pagina.get_by_text(esporte, exact=True).first.click()
 
     hoje = pagina.locator(".picker__day--today").first
@@ -48,7 +50,7 @@ def main() -> None:
 
             caminho = os.path.join(DIRETORIO_FIXTURES, nome_arquivo)
             cabecalho = (
-                f"<!-- capturado de {courts_collector.URL_ARENA} em {date.today().isoformat()} -->\n"
+                f"<!-- capturado de {ARENA} em {date.today().isoformat()} -->\n"
                 f"<!-- {esporte}, período {periodo} -->\n"
             )
             with open(caminho, "w", encoding="utf-8") as arquivo:

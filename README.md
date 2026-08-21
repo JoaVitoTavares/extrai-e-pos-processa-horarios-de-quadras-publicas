@@ -1,4 +1,4 @@
-# Extrator SP Sports — aplicação base (TCC)
+# Extrator de quadras — aplicação base (TCC)
 
 Exemplo mínimo de **web scraping de site dinâmico** (feito no Bubble.io).
 Parte dos dados não vem no HTML pronto, então a aplicação combina duas
@@ -6,37 +6,47 @@ técnicas: uma chamada direta à **API JSON** do site (leve, sem navegador) e
 um **navegador real controlado por Playwright** para o que só aparece depois
 da interação.
 
+A coleta percorre uma **lista de arenas**, e não um site só. Todas compartilham o mesmo
+front, então o mesmo coletor serve para todas; o que muda é a URL, e com ela as quadras,
+o endereço e — o ponto que faz diferença no dado — **a cidade em que o tempo é medido**.
+
 ## O que ele faz
 
+Para **cada arena** de `ARENAS`:
+
 **Técnica 1 — API JSON (sem navegador).**
-Chama `https://webarena.app/api/1.1/init/data` com `requests` e lista os
+Chama `/api/1.1/init/data` no domínio da própria arena com `requests` e lista os
 esportes disponíveis direto do JSON, sem abrir o Chromium.
 
 **Técnica 2 — navegador headless (Playwright).**
-1. Abre `https://webarena.app/arena/sp-sports`
+1. Abre a URL da arena
 2. Percorre os **quatro tipos de quadra de interesse** — Vôlei de praia, Futebol de
    salão, Grama 7 e Grama 5 — ignorando os demais esportes do site
-3. Para cada um, percorre o **dia atual e os próximos** (`DIAS_A_FRENTE`), achando cada
+3. Lê o **endereço** que a arena publica logo abaixo do esporte escolhido, de onde saem
+   as coordenadas do clima
+4. Para cada um, percorre o **dia atual e os próximos** (`DIAS_A_FRENTE`), achando cada
    data no calendário pelo `aria-label` da célula (`21/08/26 - sexta-feira`)
-4. Percorre os períodos **Manhã**, **Tarde** e **Noite**
-5. Em cada período, percorre **cada quadra** do esporte separadamente
-6. Imprime os horários de cada quadra (🟢 Livre / 🔴 Indisponível) e quantas vagas ficaram livres
+5. Percorre os períodos **Manhã**, **Tarde** e **Noite**
+6. Em cada período, percorre **cada quadra** do esporte separadamente
+7. Imprime os horários de cada quadra (🟢 Livre / 🔴 Indisponível) e quantas vagas ficaram livres
 
 O **preço só é aberto no dia de hoje**. Ler o valor custa um clique por horário livre, e
 os dias à frente são quase todos livres; cada um deles ainda será visitado no seu próprio
 dia, que é quando o preço entra na linha.
 
 Um esporte que falhe por lentidão do site é reportado e pulado, sem derrubar a coleta
-dos demais; uma execução que não colete nada sai com código de erro, em vez de gravar
-silêncio — o modo de falha mais caro num coletor agendado.
+dos demais; **uma arena que falhe inteira também** — a lista de sites não fica refém do
+pior deles. Uma execução que não colete nada em arena nenhuma sai com código de erro, em
+vez de gravar silêncio — o modo de falha mais caro num coletor agendado.
 
 ## Os módulos
 
 | Arquivo | Papel |
 | --- | --- |
-| `main.py` | **Ponto de entrada.** Chama os coletores em sequência, imprime o relatório e manda gravar |
-| `config.py` | O que se edita: URL da arena, coordenadas, tipos de quadra, diretório de saída |
-| `courts_collector.py` | Coleta das reservas — API JSON e navegador. É biblioteca, não roda sozinho |
+| `main.py` | **Ponto de entrada.** Percorre as arenas, chama os coletores em sequência e manda gravar |
+| `config.py` | O que se edita: lista de arenas, tipos de quadra, diretório de saída |
+| `courts_collector.py` | Coleta das reservas e do endereço — API JSON e navegador. É biblioteca, não roda sozinho |
+| `localizacao.py` | Traduz o endereço da arena em coordenadas, e lembra o resultado |
 | `weather_collector.py` | Coleta as condições atuais e a previsão hora a hora, pela API Open-Meteo |
 | `tratamento.py` | Casa clima e previsão com as reservas: a janela do jogo e o instante da reserva |
 | `persistencia.py` | Gravação do CSV por quadra, com upsert. Não depende do Playwright |
@@ -47,17 +57,111 @@ Chromium para ler o nome de uma coluna.
 
 ## Configuração
 
-Tudo que muda de instalação para instalação vive em `config.py` — a URL da arena, as
-coordenadas usadas na consulta de clima e o diretório onde as extrações são gravadas.
-Trocar de arena é editar uma linha, sem abrir o coletor.
+Tudo que muda de instalação para instalação vive em `config.py`. O que mais importa é a
+lista de arenas:
 
-`DIAS_A_FRENTE` é o quanto a coleta enxerga além de hoje (2, ou seja, três dias por
-rodada). É o parâmetro que decide quanta antecedência de reserva o histórico consegue
-registrar, e o que mais pesa no tempo de execução: cada dia a mais custa por volta de
-meio minuto por rodada. O site libera 60 dias, então o teto é prático, não do site. A
-previsão acompanha o mesmo horizonte automaticamente.
+```python
+ARENAS = [
+    {"nome": "SP Sports", "url": "https://webarena.app/arena/sp-sports"},
+    {"nome": "Arena Parobé", "url": "https://webarena.app/arena/outra-quadra"},
+]
+```
 
-## Saída: um CSV por quadra
+Acrescentar um site é acrescentar uma linha. Só a `url` é obrigatória — dela saem a
+página que o navegador abre, o endereço da API JSON (mesmo caminho, domínio da própria
+arena, então um site fora do `webarena.app` também serve) e o **diretório onde a arena
+grava**, tirado do último trecho da URL. O `nome` é o que vai à coluna `arena` do CSV; na
+falta dele, vale o identificador da URL. É a URL que identifica a arena, e não o nome:
+renomear no config não desgarra o histórico já coletado.
+
+Uma terceira chave, opcional, é a saída de emergência:
+
+```python
+    {"nome": "Arena X", "url": "...", "coordenadas": (-29.65, -50.81)},
+```
+
+Coordenadas fixadas à mão vencem a geocodificação, para o caso do endereço que o mapa não
+reconhece. Sem elas — o caso normal —, o endereço publicado pela arena basta.
+
+`DIAS_A_FRENTE` é o quanto a coleta enxerga além de hoje. É o parâmetro que decide quanta
+antecedência de reserva o histórico consegue registrar, e o que mais pesa no tempo de
+execução: cada dia a mais custa por volta de meio minuto **por arena**. O site libera 60
+dias, então o teto é prático, não do site. A previsão acompanha o mesmo horizonte
+automaticamente.
+
+## O endereço, e as coordenadas que saem dele
+
+Escolhido o esporte, a arena publica o endereço dela logo abaixo — `Boqueirão 2710,
+Canoas`, `20 de Junho 54, Parobé`. É a única coisa na página que diz **onde a quadra
+fica**, e é dela que sai o clima: sem isso, arenas de cidades diferentes receberiam todas
+o tempo de um ponto fixo no `config`, e a variável central do trabalho passaria a
+descrever o lugar errado.
+
+A leitura é **pela posição na tela**, não pela ordem do HTML: o Bubble publica os blocos
+fora de ordem e os coloca no lugar com `order` do CSS. O endereço é o primeiro texto
+abaixo do nome do esporte e acima do campo de data que tenha uma **vírgula** — é ela que
+o separa do rótulo `Escolha uma data.`, que é o mesmo tipo de bloco. Não achando nada,
+a leitura devolve vazio, e a arena segue com o local que já conhecia.
+
+O endereço vira coordenada no [Nominatim](https://nominatim.openstreetmap.org), o
+geocodificador do OpenStreetMap — público, gratuito e sem chave. A pergunta desce do
+específico para o genérico até uma forma responder:
+
+```
+"20 de Junho 54, Parobé"   ->  como veio
+"20 de Junho, Parobé"      ->  sem o número do prédio
+"Parobé"                   ->  só a cidade
+```
+
+Descer um degrau é melhor do que devolver nada: para o clima a cidade já basta — a grade
+da Open-Meteo tem quilômetros de lado —, e o número do prédio é justamente o que costuma
+faltar no mapa. Nenhuma delas respondendo, a arena passa a rodada sem clima; carimbar nela
+o tempo de outro lugar seria pior do que a lacuna.
+
+O resultado fica em `local.json`, no diretório da arena:
+
+```json
+{
+  "endereco": "Boqueirão 2710, Canoas",
+  "latitude": -29.904984,
+  "longitude": -51.1612617,
+  "cidade": "Canoas",
+  "origem": "Boqueirão 2710, Canoas",
+  "resolvido_em": "2026-08-21T07:18:08"
+}
+```
+
+O arquivo é memória e registro ao mesmo tempo. **Memória** porque o geocodificador só é
+consultado quando o endereço lido agora é diferente do que está ali: o endereço de uma
+quadra não muda, e bater no serviço quatro vezes por hora para reconfirmar o que ninguém
+mudou seria abusar de um serviço público limitado a uma consulta por segundo. **Registro**
+porque é ele que diz de onde o clima daquela pasta foi medido.
+
+Duas recusas deliberadas, do mesmo feitio das outras do projeto. Rodada em que o endereço
+não foi lido fica com o local já gravado — a arena não mudou de lugar só porque a página
+não pintou a tempo. E endereço **novo** que o mapa não reconhece devolve lacuna em vez de
+herdar as coordenadas do endereço antigo, que descrevem outro ponto: se a arena se mudou,
+o clima do lugar velho não é o dela.
+
+> O `User-Agent` que identifica a aplicação (`IDENTIFICACAO_GEOCODIFICACAO`) é exigência
+> do Nominatim, que recusa chamada anônima. A [política de
+> uso](https://operations.osmfoundation.org/policies/nominatim/) pede também um contato
+> de quem opera o coletor — é o lugar de acrescentá-lo, se a coleta crescer.
+
+## Saída: um diretório por arena, um CSV por quadra
+
+```
+.extracoes/
+├── sp-sports/
+│   ├── local.json
+│   ├── clima-leituras.csv
+│   ├── clima-previsoes.csv
+│   ├── areia-1-interna-extracoes.csv
+│   └── futsal-interna-extracoes.csv
+└── outra-quadra/
+    ├── local.json
+    └── ...
+```
 
 Cada quadra encontrada ganha o seu próprio arquivo, `<slug-da-quadra>-extracoes.csv`,
 criado na primeira vez que ela aparece — `futsal-interna-extracoes.csv`,
@@ -65,9 +169,49 @@ criado na primeira vez que ela aparece — `futsal-interna-extracoes.csv`,
 horário: um esporte pode ter várias quadras (o vôlei de praia tem quatro), e o `17:00`
 de uma nunca deve disputar linha com o `17:00` de outra.
 
-Duas colunas saem do nome da quadra: `tipo_quadra`, normalizada para `Vôlei de praia`,
-`Futebol de salão`, `Grama 7` ou `Grama 5`; e `quadra_coberta`, `true` para
+O diretório por arena é a mesma ideia um nível acima. Duas arenas podem ter uma `Quadra 1`
+cada, e o slug das duas é o mesmo: sem a pasta, uma sobrescreveria o histórico da outra —
+e as duas tabelas de clima, que são de uma cidade só, viveriam o mesmo conflito.
+
+Duas colunas abrem o CSV e dizem de onde a linha veio: `arena`, o nome do config, e
+`cidade`, a que o geocodificador resolveu. Elas são o que permite juntar os arquivos de
+várias arenas num dataset só sem perder o lugar de cada reserva — e são o que falta hoje
+para preencher `feriado`, `evento_grande` e `jogo_em_porto_alegre`, que dependem da cidade.
+
+> `cidade` vazia quer dizer "ainda não sei", e não "não tem": a rodada em que o
+> geocodificador falhar não apaga a cidade que a anterior descobriu, e a que a descobrir
+> preenche as linhas que já estavam gravadas — enquanto o horário não tiver chegado.
+
+Outras duas colunas saem do nome da quadra: `tipo_quadra`, normalizada para `Vôlei de
+praia`, `Futebol de salão`, `Grama 7` ou `Grama 5`; e `quadra_coberta`, `true` para
 interna/coberta e `false` para externa/descoberta.
+
+### Migrando o histórico que já existe
+
+O dataset coletado antes da lista de arenas está solto na raiz de `.extracoes/`, onde a
+coleta não procura mais. **Antes da primeira rodada nova** — que numa máquina com o `cron`
+ligado é a dos próximos quinze minutos —, os arquivos precisam descer para a pasta da
+arena:
+
+```bash
+mkdir -p .extracoes/sp-sports && mv .extracoes/*.csv .extracoes/sp-sports/
+```
+
+Feito depois, não se perde nada de irreversível, mas o histórico se parte em dois: os
+horários já observados nascem de novo na pasta nova, com `primeira_coleta` recomeçando, e
+a virada de status de quem já estava sob observação passa despercebida.
+
+As linhas antigas ficam com `arena` e `cidade` vazias — elas são anteriores às colunas. Os
+horários que ainda não chegaram se preenchem sozinhos na próxima rodada; para os que já
+passaram, que estão congelados, vale um preenchimento de uma vez:
+
+```python
+import glob, pandas as pd
+for caminho in glob.glob(".extracoes/sp-sports/*-extracoes.csv"):
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+    df.loc[df["arena"] == "", ["arena", "cidade"]] = ["SP Sports", "Canoas"]
+    df.to_csv(caminho, index=False)
+```
 
 ## Quando a reserva foi feita
 
@@ -107,9 +251,10 @@ existe mais; se o horário for reservado de novo, a próxima virada grava a data
 
 ## Clima: uma tabela à parte
 
-Cada execução também registra as condições do momento na arena, pela API pública da
-[Open-Meteo](https://open-meteo.com), em `clima-leituras.csv` — um arquivo só, série
-temporal, uma linha por leitura. As coordenadas ficam no `config.py`.
+Cada execução também registra as condições do momento **em cada arena**, pela API pública
+da [Open-Meteo](https://open-meteo.com), em `clima-leituras.csv` — um arquivo por arena,
+série temporal, uma linha por leitura. As coordenadas são as que saíram do endereço
+daquela arena, e vão gravadas na própria linha.
 
 O `weather_code` da API é um número; a tradução para texto (`Encoberto`, `Chuva
 fraca`, `Trovoada`…) acontece **na extração**, para o histórico nascer legível. Um
@@ -251,11 +396,13 @@ no ar.
 
 Separado disso há o **canário**, o único teste que acessa a rede. Ele não afirma
 valores (horário e preço mudam de hora em hora), só a forma: o seletor ainda encontra
-quadras, elas ainda têm nome, a nomenclatura de cobertura continua reconhecível e o
+quadras, elas ainda têm nome, a nomenclatura de cobertura continua reconhecível, a arena
+ainda publica o endereço com a vírgula que o distingue do rótulo vizinho, e o
 calendário ainda libera os dias à frente com o `aria-label` no formato esperado. É o
-que avisa quando o site é republicado e o scraper para de achar as coisas — inclusive no
-modo de falha mais discreto, em que a coleta continua funcionando mas só enxerga hoje, e
-a hora da reserva some do histórico sem nenhum erro.
+que avisa quando o site é republicado e o scraper para de achar as coisas — inclusive nos
+modos de falha mais discretos, em que a coleta continua funcionando mas só enxerga hoje e
+a hora da reserva some do histórico, ou em que o endereço deixa de ser lido e o clima
+passa a vir do último ponto conhecido, sem nenhum erro aparecer.
 
 ```bash
 pytest -m rede                        # roda o canário, sob demanda
@@ -298,11 +445,24 @@ slots que a outra acabou de inserir. Rodada que encontra a trava tomada **sai co
 anota "pulado" no log; ela não entra na fila, porque a rodada em andamento já está
 colhendo dado mais fresco do que a duplicata colheria.
 
-Um `timeout` de 5 minutos fecha o terceiro buraco: sem ele, um Chromium travado seguraria
-a trava para sempre e mataria todas as coletas seguintes. Uma rodada normal leva por volta
-de **2min30s** com `DIAS_A_FRENTE = 2`, então o limite ainda é folgado — quando ele
-dispara, o código é 124, distinguível do 1. Quem aumentar o horizonte precisa refazer essa
-conta: cada dia a mais custa cerca de meio minuto, e passar de 7 dias encosta no limite.
+Um `timeout` fecha o terceiro buraco: sem ele, um Chromium travado seguraria a trava para
+sempre e mataria todas as coletas seguintes. Quando ele dispara, o código é 124,
+distinguível do 1.
+
+**O limite é a conta que precisa ser refeita a cada arena acrescentada.** Uma rodada leva
+por volta de 2min30s por arena com `DIAS_A_FRENTE = 2`, e cada dia a mais custa cerca de
+meio minuto — também por arena, porque as arenas rodam em sequência:
+
+```
+LIMITE  ≈  n_arenas × (2min30s + 0min30s × (DIAS_A_FRENTE - 2))
+```
+
+`LIMITE_DE_EXECUCAO`, no topo de `scripts/rodar_extracao.sh`, é onde ela entra. Duas coisas
+a olhar junto: um limite **curto** demais corta a rodada no meio, e as arenas do fim da
+lista nunca chegam a ser coletadas; um limite **maior que o intervalo do cron** faz a
+rodada seguinte encontrar a trava tomada e sair pulando — o `flock` protege o dataset, mas
+a cadência real deixa de ser a que está no crontab. Passando disso, o intervalo é que
+precisa crescer.
 
 ### Por que 15 minutos, o dia inteiro
 
@@ -351,12 +511,14 @@ regime — o relatório cresceu junto com os dias coletados. `.logs/` fica fora 
 ## Próximos passos (para evoluir no TCC)
 - **Alertar**: notificar quando um horário mudar de "Indisponível" para "Livre" — a
   virada já é detectada na gravação, falta o aviso
-- Parametrizar esporte/período/data via argumentos de linha de comando
-  (a função `coletar_horarios` já aceita `esporte`, `periodo` e `dias_a_frente`; o
-  `main.py` percorre os quatro tipos de quadra, mas não aceita recorte pela linha de
-  comando)
+- Parametrizar arena/esporte/período/data via argumentos de linha de comando
+  (a função `coletar_horarios` já aceita `esporte`, `url_arena`, `periodo` e
+  `dias_a_frente`; o `main.py` percorre todas as arenas e os quatro tipos de quadra, mas
+  não aceita recorte pela linha de comando)
 - Preencher `feriado`, `evento_grande` e `jogo_em_porto_alegre`, as três colunas de
-  contexto que existem no CSV e ainda nascem vazias
+  contexto que existem no CSV e ainda nascem vazias — agora que a coluna `cidade` diz a
+  que lugar cada linha se refere, as três passam a ser respondíveis para arenas de
+  cidades diferentes, e `jogo_em_porto_alegre` provavelmente vira uma pergunta por cidade
 
 ## Conceito-chave
 Sempre desça a "escada" do mais leve pro mais pesado:
