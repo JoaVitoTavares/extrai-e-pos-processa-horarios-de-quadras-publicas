@@ -9,13 +9,15 @@ import pytest
 import persistencia
 
 AGORA = datetime(2026, 8, 7, 8, 0, 0)
+DIA = "2026-08-07"
 
 
-def quadra(nome, horarios, coberta="true", tipo="Vôlei de praia", periodo="Noite"):
+def quadra(nome, horarios, coberta="true", tipo="Vôlei de praia", periodo="Noite", data=DIA):
     """Monta o dicionário de uma quadra no formato que _extrair_quadras devolve, para
     os testes descreverem só o que importa em cada caso."""
     return {
         "coletado_em": AGORA.isoformat(timespec="seconds"),
+        "data": data,
         "esporte": "Vôlei de praia",
         "periodo": periodo,
         "quadra": nome,
@@ -41,7 +43,34 @@ def test_colunas_de_clima_ficam_em_bloco_contiguo():
     assert colunas[inicio:inicio + 5] == [
         "clima", "temperatura", "umidade", "precipitacao", "velocidade_vento"
     ]
-    assert colunas.index("feriado") == inicio + 5
+    assert colunas.index("feriado") == inicio + 10
+
+
+def test_previsao_espelha_as_colunas_do_clima_observado():
+    """O bloco previsto vem logo depois do observado e traz exatamente as mesmas cinco
+    variáveis, com prefixo: é o que permite comparar o que se esperava do tempo com o
+    que de fato aconteceu, sem procurar equivalência entre nomes diferentes."""
+    colunas = persistencia.COLUNAS_CSV
+    inicio = colunas.index("previsao_clima")
+
+    assert persistencia.COLUNAS_DA_PREVISAO == [
+        f"previsao_{coluna}" for coluna in persistencia.COLUNAS_DE_CLIMA
+    ]
+    assert colunas[inicio:inicio + 5] == persistencia.COLUNAS_DA_PREVISAO
+    assert colunas.index("velocidade_vento") == inicio - 1
+
+
+def test_colunas_da_reserva_ficam_juntas_do_carimbo_da_coleta():
+    """Quando a reserva foi feita, em que período do dia e com quanta antecedência ficam
+    ao lado de primeira_coleta e ultima_atualizacao: as cinco contam a mesma história —
+    o que o coletor viu, e quando."""
+    colunas = persistencia.COLUNAS_CSV
+    inicio = colunas.index("primeira_coleta")
+
+    assert colunas[inicio:inicio + 5] == [
+        "primeira_coleta", "ultima_atualizacao",
+        "reservado_em", "periodo_da_reserva", "antecedencia_horas",
+    ]
 
 
 def test_mesmo_horario_em_quadras_diferentes_vira_duas_linhas():
@@ -159,6 +188,160 @@ def test_upsert_congela_slot_que_ja_passou(tmp_path):
 
     assert len(df) == 1
     assert df.loc[0, "status"] == "Livre"
+
+
+@pytest.mark.parametrize(
+    "hora, esperado",
+    [(0, "Madrugada"), (3, "Madrugada"), (5, "Madrugada"), (6, "Manhã"), (11, "Manhã"),
+     (12, "Tarde"), (17, "Tarde"), (18, "Noite"), (23, "Noite")],
+)
+def test_periodo_do_dia(hora, esperado):
+    """A madrugada é um período à parte, e não manhã: o site só vende Manhã, Tarde e
+    Noite porque a arena não abre de madrugada, mas reservar às três da manhã acontece —
+    e é essa a hora que a coluna precisa saber distinguir."""
+    assert persistencia.periodo_do_dia(datetime(2026, 8, 7, hora, 30)) == esperado
+
+
+def test_primeira_coleta_carimbada_uma_vez_so(tmp_path):
+    """A primeira vez que um slot é visto fica gravada e não é mais reescrita: é ela que
+    diz desde quando aquele horário está sob observação. Sem esse carimbo, um
+    `reservado_em` vazio seria ambíguo entre 'nunca reservado' e 'já chegou reservado'."""
+    livre = [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])]
+    caminho = persistencia.salvar_extracao(livre, str(tmp_path), AGORA)[0]
+    persistencia.salvar_extracao(livre, str(tmp_path), datetime(2026, 8, 7, 12, 0))
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "primeira_coleta"] == "2026-08-07T08:00:00"
+    assert df.loc[0, "ultima_atualizacao"] == "2026-08-07T12:00:00"
+
+
+def test_reserva_detectada_quando_o_horario_livre_vira_indisponivel(tmp_path):
+    """O ganho central da coleta de vários dias: o slot é visto livre numa rodada e
+    ocupado na seguinte, e é essa virada que data a reserva. Ficam gravados o instante,
+    o período do dia em que a pessoa reservou e a antecedência em relação ao jogo."""
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])], str(tmp_path), AGORA
+    )
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}])],
+        str(tmp_path), datetime(2026, 8, 7, 17, 0),
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "reservado_em"] == "2026-08-07T17:00:00"
+    assert df.loc[0, "periodo_da_reserva"] == "Tarde"
+    assert df.loc[0, "antecedencia_horas"] == "3.00"
+
+
+def test_reserva_de_dias_antes_mantem_a_antecedencia_grande(tmp_path):
+    """A antecedência é contada até o início do jogo, não até o fim do dia da coleta:
+    reservar na quinta um horário de sábado tem que aparecer como dois dias, que é
+    justamente o comportamento que a coleta só do dia atual nunca conseguia ver."""
+    sabado = "2026-08-09"
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}], data=sabado)],
+        str(tmp_path), AGORA,
+    )
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}], data=sabado)],
+        str(tmp_path), datetime(2026, 8, 7, 20, 0),
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "antecedencia_horas"] == "48.00"
+    assert df.loc[0, "periodo_da_reserva"] == "Noite"
+
+
+def test_horario_que_ja_nasce_indisponivel_nao_inventa_reserva(tmp_path):
+    """Slot que aparece ocupado na primeira coleta foi reservado antes de estar sob
+    observação, e a hora dessa reserva não é conhecida: a coluna fica vazia em vez de
+    receber a hora da coleta, que seria um dado inventado."""
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}])],
+        str(tmp_path), AGORA,
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "reservado_em"] == ""
+    assert df.loc[0, "primeira_coleta"] == "2026-08-07T08:00:00"
+
+
+def test_reserva_detectada_nao_e_reescrita_pelas_rodadas_seguintes(tmp_path):
+    """O que interessa é quando a reserva foi feita, não quando foi vista de novo: as
+    coletas seguintes continuam achando o slot ocupado e não podem empurrar o carimbo
+    para a frente."""
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])], str(tmp_path), AGORA
+    )
+    ocupado = [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}])]
+    persistencia.salvar_extracao(ocupado, str(tmp_path), datetime(2026, 8, 7, 17, 0))
+    caminho = persistencia.salvar_extracao(ocupado, str(tmp_path), datetime(2026, 8, 7, 18, 30))[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "reservado_em"] == "2026-08-07T17:00:00"
+    assert df.loc[0, "antecedencia_horas"] == "3.00"
+
+
+def test_cancelamento_apaga_o_que_a_reserva_tinha_deixado(tmp_path):
+    """Voltando a livre, a reserva deixou de existir: as colunas que a descreviam saem
+    junto, inclusive a previsão congelada. Manter o carimbo antigo seria afirmar uma
+    reserva que não está mais lá; se o horário for reservado de novo, a próxima virada
+    grava a data nova."""
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])], str(tmp_path), AGORA
+    )
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}])],
+        str(tmp_path), datetime(2026, 8, 7, 15, 0),
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+    df.loc[0, persistencia.COLUNAS_DA_PREVISAO] = ["Chuva forte", "15.2", "80", "4.1", "22.0"]
+    df.to_csv(caminho, index=False)
+
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])],
+        str(tmp_path), datetime(2026, 8, 7, 16, 0),
+    )
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert list(df.loc[0, persistencia.COLUNAS_DA_VIRADA]) == [""] * 8
+
+
+def test_slot_de_outro_dia_nao_congela_pelo_relogio_de_hoje(tmp_path):
+    """O congelamento compara o relógio com a data da própria linha: às 08:00 de sexta o
+    horário das 07:00 de sábado ainda está a um dia de distância. Comparando só a hora,
+    todo horário matinal dos dias à frente nasceria congelado e nunca veria a reserva."""
+    amanha = "2026-08-08"
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "07:00", "status": "Livre"}], data=amanha)],
+        str(tmp_path), AGORA,
+    )
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "07:00", "status": "Indisponível"}], data=amanha)],
+        str(tmp_path), datetime(2026, 8, 7, 9, 0),
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "status"] == "Indisponível"
+    assert df.loc[0, "reservado_em"] == "2026-08-07T09:00:00"
+
+
+def test_mesmo_horario_em_dias_diferentes_vira_duas_linhas(tmp_path):
+    """A rodada percorre vários dias, então a data entra na chave do upsert: o 20:00 de
+    hoje e o 20:00 de amanhã são dois registros, e não um sobrescrevendo o outro."""
+    caminho = persistencia.salvar_extracao(
+        [
+            quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}]),
+            quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}],
+                   data="2026-08-08"),
+        ],
+        str(tmp_path), AGORA,
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False).set_index("data")
+
+    assert len(df) == 2
+    assert df.loc["2026-08-07", "status"] == "Livre"
+    assert df.loc["2026-08-08", "status"] == "Indisponível"
 
 
 def test_quadra_nova_nao_altera_o_arquivo_existente(tmp_path):

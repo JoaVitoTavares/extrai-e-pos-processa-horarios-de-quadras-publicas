@@ -15,11 +15,12 @@ def _que_falha(erro):
     return falhar
 
 
-def quadra(nome="Areia 1 - Interna", horarios=None, aviso=None):
+def quadra(nome="Areia 1 - Interna", horarios=None, aviso=None, data="2026-08-07"):
     """Monta o dicionário de uma quadra no formato que o coletor devolve, para os testes
     do gerenciador descreverem só o que importa em cada caso."""
     return {
         "coletado_em": "2026-08-07T08:00:00",
+        "data": data,
         "esporte": "Vôlei de praia",
         "periodo": "Noite",
         "quadra": nome,
@@ -49,6 +50,15 @@ def tratamento_dublado(monkeypatch):
     return chamadas
 
 
+@pytest.fixture(autouse=True)
+def clima_dublado(monkeypatch):
+    """Dubla as duas coletas de clima em todo teste deste arquivo, pelo mesmo motivo do
+    tratamento: as de verdade chamam a Open-Meteo e gravam no diretório de extrações da
+    máquina, e a suíte padrão roda offline. Quem precisa da ordem ou da falha redubla."""
+    monkeypatch.setattr(main, "coletar_clima", lambda: "clima.csv")
+    monkeypatch.setattr(main, "coletar_previsao", lambda: "previsao.csv")
+
+
 @pytest.fixture
 def etapas(monkeypatch, tratamento_dublado):
     """Substitui as etapas do gerenciador por dublês que registram a ordem das chamadas,
@@ -62,15 +72,19 @@ def etapas(monkeypatch, tratamento_dublado):
         main, "salvar_extracao", lambda r: ordem.append("grava") or ["um.csv"]
     )
     monkeypatch.setattr(main, "coletar_clima", lambda: ordem.append("clima") or "clima.csv")
+    monkeypatch.setattr(
+        main, "coletar_previsao", lambda: ordem.append("previsao") or "previsao.csv"
+    )
     return ordem
 
 
 def test_etapas_rodam_na_ordem(etapas):
-    """O tratamento é o último porque depende das duas coletas: precisa das reservas já
-    gravadas e da leitura de clima mais recente para casar uma com a outra."""
+    """O tratamento é o último porque depende de todas as coletas: precisa das reservas
+    já gravadas — é a gravação que detecta a virada de status — e das duas tabelas de
+    clima para casar uma coisa com a outra."""
     main.main()
 
-    assert etapas == ["quadras", "grava", "clima", "trata"]
+    assert etapas == ["quadras", "grava", "clima", "previsao", "trata"]
 
 
 def test_grava_o_que_o_coletor_devolveu(monkeypatch):

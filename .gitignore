@@ -2,4 +2,5 @@
 .venv/
 .extracoes/
 .extrações/
+.logs/
 __pycache__/
