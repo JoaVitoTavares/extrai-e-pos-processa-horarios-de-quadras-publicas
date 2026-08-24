@@ -39,5 +39,13 @@ def test_arenas_nao_repetem_o_diretorio():
     assert len(set(diretorios)) == len(diretorios)
 
 
+def test_toda_arena_procura_algum_tipo_de_quadra():
+    """Arena com catálogo vazio percorreria zero esportes e gravaria zero linhas sem erro
+    nenhum: o diretório dela nasceria com o clima da cidade e nenhuma quadra para casar
+    com ele."""
+    for arena in config.ARENAS:
+        assert main.preparar_arena(arena)["tipos"]
+
+
 def test_janela_do_clima_e_um_intervalo_valido():
     assert config.HORAS_ANTES_DA_RESERVA > config.HORAS_ATE_A_RESERVA > 0

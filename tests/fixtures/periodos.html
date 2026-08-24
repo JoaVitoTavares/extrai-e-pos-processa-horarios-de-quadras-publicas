@@ -1,0 +1,39 @@
+<!-- barra de períodos de uma arena que só vende à noite: Noite já vem escolhida e realçada -->
+<!-- o realce é o fundo azul; os outros dois botões ficam com fundo transparente -->
+<div style="display: flex; flex-direction: row;">
+  <div class="bubble-element Text baTfaCaA clickable-element" onclick="escolher('Manhã')"
+       style="min-height: 35px; width: 100px; background-color: rgba(0, 0, 0, 0);">
+    <div>Manhã</div>
+  </div>
+  <div class="bubble-element Text baTfaFr clickable-element" onclick="escolher('Tarde')"
+       style="min-height: 35px; width: 100px; background-color: rgba(0, 0, 0, 0);">
+    <div>Tarde</div>
+  </div>
+  <div class="bubble-element Text baTfaGaH clickable-element" onclick="escolher('Noite')"
+       style="min-height: 35px; width: 100px; background-color: rgb(186, 217, 253);">
+    <div>Noite</div>
+  </div>
+</div>
+<div class="bubble-rg-flex-row">
+  <div class="group-item" id="quadra">
+    <div>Ginásio 51 99870-1500</div>
+    <div>19:00 - Indisponível</div>
+    <div>20:00 - Livre</div>
+  </div>
+</div>
+<script>
+  const HORARIOS = {
+    'Manhã': '',
+    'Tarde': '',
+    'Noite': '<div>19:00 - Indisponível</div><div>20:00 - Livre</div>',
+  };
+  function escolher(periodo) {
+    document.querySelectorAll('.clickable-element').forEach((botao) => {
+      botao.style.backgroundColor = botao.innerText.trim() === periodo
+        ? 'rgb(186, 217, 253)'
+        : 'rgba(0, 0, 0, 0)';
+    });
+    document.getElementById('quadra').innerHTML =
+      '<div>Ginásio 51 99870-1500</div>' + HORARIOS[periodo];
+  }
+</script>

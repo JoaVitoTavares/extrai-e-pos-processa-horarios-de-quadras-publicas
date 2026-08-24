@@ -11,6 +11,7 @@ import pytest
 
 import config
 import courts_collector
+import main
 
 pytestmark = pytest.mark.rede
 
@@ -32,7 +33,7 @@ def endereco_do_site(navegador):
     que é exatamente o momento em que a coleta o lê."""
     pagina = navegador.new_page()
     pagina.goto(ARENA, wait_until="networkidle", timeout=60_000)
-    pagina.get_by_text(ESPORTE, exact=True).first.click()
+    courts_collector._escolher_esporte(pagina, ESPORTE, timeout_ms=15_000)
     endereco = courts_collector.extrair_endereco(pagina, ESPORTE, timeout_ms=15_000)
     pagina.close()
     return endereco
@@ -45,7 +46,7 @@ def pagina_no_periodo(navegador):
     quadras assíncronas — para o canário exercitar o caminho de produção."""
     pagina = navegador.new_page()
     pagina.goto(ARENA, wait_until="networkidle", timeout=60_000)
-    pagina.get_by_text(ESPORTE, exact=True).first.click()
+    courts_collector._escolher_esporte(pagina, ESPORTE, timeout_ms=15_000)
     courts_collector._selecionar_dia(pagina, HOJE, timeout_ms=15_000)
     courts_collector._selecionar_periodo(
         pagina, PERIODO, pagina.locator("body").inner_text(), timeout_ms=TIMEOUT_PERIODO_MS
@@ -64,10 +65,17 @@ def test_api_ainda_lista_esportes(esportes_do_site):
     assert esportes_do_site
 
 
-def test_api_ainda_traz_os_tipos_de_interesse(esportes_do_site):
-    """Os quatro tipos de quadra que o CSV normaliza continuam existindo no site; se um
-    sumir ou for renomeado, TIPOS_QUADRA precisa acompanhar."""
-    assert set(courts_collector.TIPOS_QUADRA) <= set(esportes_do_site)
+@pytest.mark.parametrize("configurada", config.ARENAS, ids=lambda arena: arena["url"])
+def test_toda_arena_ainda_oferece_os_tipos_que_declara(configurada):
+    """O catálogo de cada arena continua batendo com o que o site dela anuncia; se um tipo
+    sumir ou for renomeado — 'Futebol Society' virando 'Society' —, o `tipos` daquela
+    arena precisa acompanhar, senão ela passa a voltar vazia sem erro nenhum."""
+    arena = main.preparar_arena(configurada)
+    alvos = courts_collector.esportes_alvo(
+        courts_collector.listar_esportes(arena["url"]), arena["tipos"]
+    )
+
+    assert courts_collector.tipos_ausentes(alvos, arena["tipos"]) == []
 
 
 def test_a_arena_ainda_publica_o_endereco(endereco_do_site):
@@ -89,11 +97,21 @@ def test_calendario_ainda_libera_os_dias_a_frente(pagina_no_periodo):
     """Os dias que a coleta percorre continuam clicáveis e continuam se identificando por
     `aria-label` no formato dd/mm/aa. É esse rótulo que o coletor usa para achar a data
     certa; se o site trocar o formato ou fechar o horizonte, a coleta silenciosamente
-    passaria a gravar só o dia de hoje — e a hora da reserva sumiria do histórico."""
+    passaria a gravar só o dia de hoje — e a hora da reserva sumiria do histórico. A grade
+    mostra um mês por vez, então o fim do horizonte cai fora dela perto da virada: o dia
+    que nem célula tem está no mês seguinte, e quem chega lá é `.picker__nav--next`; o que
+    tem célula desabilitada, não — esse é o horizonte fechando, e falha."""
+    na_grade = 0
     for dia in courts_collector.dias_de_coleta(HOJE):
         rotulo = dia.strftime(courts_collector.FORMATO_DIA_NO_CALENDARIO)
+        if not pagina_no_periodo.locator(f".picker__day[aria-label^='{rotulo}']").count():
+            continue
         seletor = f".picker__day[aria-label^='{rotulo}']:not(.picker__day--disabled)"
         assert pagina_no_periodo.locator(seletor).count() == 1, f"dia indisponível: {rotulo}"
+        na_grade += 1
+
+    assert na_grade, "nenhum dia do horizonte se identifica por aria-label na grade aberta"
+    assert pagina_no_periodo.locator(".picker__nav--next").count() == 1
 
 
 def test_dia_selecionado_e_reconhecivel(pagina_no_periodo):
@@ -105,6 +123,15 @@ def test_dia_selecionado_e_reconhecivel(pagina_no_periodo):
     assert selecionado.first.get_attribute("aria-label").startswith(
         HOJE.strftime(courts_collector.FORMATO_DIA_NO_CALENDARIO)
     )
+
+
+def test_periodo_escolhido_continua_realcado(pagina_no_periodo):
+    """O período que está na tela se distingue dos outros pelo fundo realçado, e é esse
+    realce que confirma o clique antes de a coleta ler os horários. Trocada a marcação, a
+    troca de período passaria a depender só de o texto mudar — e a arena que vende num
+    período só voltaria a sair do dataset inteira, sem erro nenhum."""
+    assert courts_collector._periodo_escolhido(pagina_no_periodo, PERIODO)
+    assert not courts_collector._periodo_escolhido(pagina_no_periodo, "Manhã")
 
 
 def test_seletor_ainda_encontra_quadras(quadras_do_site):

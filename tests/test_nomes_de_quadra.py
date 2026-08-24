@@ -37,6 +37,7 @@ def test_caminho_csv_respeita_o_diretorio():
         ("Areia 1 - Interna", "true"),
         ("FUTSAL - Interna", "true"),
         ("Quadra coberta 2", "true"),
+        ("Ginásio 51 99870-1500", "true"),
         ("GRAMA 7 - EXTERNA", "false"),
         ("Areia 4 - EXTERNA", "false"),
         ("Quadra descoberta 2", "false"),
@@ -66,3 +67,19 @@ def test_quadra_coberta_classifica_pelo_nome(nome, esperado):
 )
 def test_tipo_quadra_canoniza_o_esporte(esporte, nome, esperado):
     assert courts_collector._tipo_quadra(esporte, nome) == esperado
+
+
+@pytest.mark.parametrize(
+    "esporte, tipos, esperado",
+    [
+        ("Futebol Society", ["Futebol society"], "Futebol society"),
+        ("Futebol society", ["Futebol society"], "Futebol society"),
+        ("Futsal", ["Futebol de salão"], "Futebol de salão"),
+        ("Vôlei de Praia", ["Vôlei de praia"], "Vôlei de praia"),
+    ],
+)
+def test_tipo_quadra_grava_a_grafia_do_config(esporte, tipos, esperado):
+    """O que vai ao CSV é como o config escreve o tipo, e não como cada site escreve: sem
+    isso 'Futebol Society' e 'Futebol society' — a mesma quadra em duas arenas — virariam
+    dois tipos no dataset, e Futsal não se juntaria ao futebol de salão."""
+    assert courts_collector._tipo_quadra(esporte, None, tipos) == esperado

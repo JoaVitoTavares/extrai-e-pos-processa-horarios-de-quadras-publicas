@@ -1,0 +1,27 @@
+<!-- arena com mais de um esporte: a lista fica na tela e o campo de data só vem depois do clique -->
+<div class="bubble-element RepeatingGroup baTaOno0 bubble-rg">
+  <div class="bubble-element group-item bubble-r-container flex column entry-1">
+    <div class="bubble-element Text baTaOoaA0 clickable-element bubble-r-vertical-center"
+         onclick="escolher()" style="min-height: 50px; font-size: 15px;">
+      <div>Beach Tennis</div>
+    </div>
+  </div>
+  <div class="bubble-element group-item bubble-r-container flex column entry-2">
+    <div class="bubble-element Text baTaOoaA0 clickable-element bubble-r-vertical-center"
+         onclick="escolher()" style="min-height: 50px; font-size: 15px;">
+      <div>Vôlei de praia</div>
+    </div>
+  </div>
+</div>
+<div id="agenda" style="display: none;">
+  <div class="bubble-element Text baTaRaAd clickable-element" style="min-height: 50px;">
+    <div>20 de Junho 54, Parobé</div>
+  </div>
+  <input class="picker__input" type="text" readonly value="" style="height: 40px; width: 300px;">
+</div>
+<script>
+  function escolher() {
+    document.querySelector('.bubble-rg').style.display = 'none';
+    document.getElementById('agenda').style.display = 'block';
+  }
+</script>
