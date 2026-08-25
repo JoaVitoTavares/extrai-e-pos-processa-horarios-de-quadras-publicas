@@ -32,6 +32,17 @@ def test_devolve_a_lista_do_json(respostas):
     assert courts_collector.listar_esportes(ARENA) == ESPORTES
 
 
+def test_espaco_das_pontas_do_nome_do_esporte_cai(respostas):
+    """O Casarão NH Sports cadastrou " Futebol society" com espaço à esquerda. Sem aparar,
+    o nome não casa com o texto da tela — que vem aparado —, e a arena coletava os horários
+    sem endereço nenhum, portanto sem clima: a variável central do trabalho faltando numa
+    arena inteira, sem erro nenhum no log."""
+    chamadas, get_falso = respostas
+    get_falso.resposta = RespostaFalsa([{"data": {"esportes_list_text": [" Futebol society "]}}])
+
+    assert courts_collector.listar_esportes(ARENA) == ["Futebol society"]
+
+
 def test_chama_a_api_com_a_arena_e_timeout(respostas):
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([{"data": {"esportes_list_text": ESPORTES}}])

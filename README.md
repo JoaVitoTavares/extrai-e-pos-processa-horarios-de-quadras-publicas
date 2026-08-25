@@ -10,24 +10,51 @@ A coleta percorre uma **lista de arenas**, e não um site só. Todas compartilha
 front, então o mesmo coletor serve para todas; o que muda é a URL, e com ela as quadras,
 o endereço e — o ponto que faz diferença no dado — **a cidade em que o tempo é medido**.
 
+São **29 arenas** no `ARENAS`, e 21 delas entregam quadra:
+
 | Arena | Cidade | Quadras |
 | --- | --- | --- |
-| SP Sports | Canoas, RS | Vôlei de praia, Futebol de salão, Grama 7, Grama 5 |
-| Arena Sabino Futebol Society | Belém, PA | Futebol society |
-| Arena Grenal | Alvorada, RS | Futebol society |
-| Arena Darc Sports | Ananindeua, PA | Futebol society |
+| SP Sports | Canoas, RS | 7 — Vôlei de praia, Futebol de salão, Grama 7, Grama 5 |
+| AABB Camaquã | Camaquã, RS | 1 × Handebol (o ginásio) |
+| Arena Darc Sports | Ananindeua, PA | 3 × Futebol society |
+| Arena Grenal | Alvorada, RS | 1 × Futebol society |
+| Arena Sabino Futebol Society | Belém, PA | 1 × Futebol society |
+| Arena Santi | Parobé, RS | 4 × Beach Tennis |
+| Arena Trescopark | Três Coroas, RS | 2 × Vôlei de praia |
+| Arena Yes Play | Taquara, RS | 4 × Vôlei de praia |
+| Beach Brasil | Porto Alegre, RS | 2 × Futevôlei |
+| Beach Place Poa | Porto Alegre, RS | 4 × Beach Tennis |
+| Casarão NH Sports | Novo Hamburgo, RS | 1 × Futebol society |
+| Complexo Rams | Paço do Lumiar, MA | 2 × Futebol society |
+| CT Belotto | Taquara, RS | 3 × Beach Tennis |
+| Esporte e Lazer Fênix | Canoas, RS | 1 × Futebol society |
+| Gol de Placa | Franca, SP | 1 × Futebol society |
+| Home Sports Bar | Canoas, RS | 1 × Futebol society |
+| Mundial Society Club | Patrocínio, MG | 1 × Futebol society |
+| Playpadel | São Lourenço do Sul, RS | 2 × Padel |
+| Racket Garden | Araricá, RS | 4 × Beach Tennis |
+| Ravena Beach | Erechim, RS | 5 × Futevôlei |
+| Vila Society | Blumenau, SC | 2 × Beach Tennis |
 
-São quatro cidades e dois estados: entre Canoas e Belém há mais de três mil quilômetros e
-dois regimes de chuva diferentes — em agosto, 8 °C na Grande Porto Alegre contra 27 °C no
-Pará, no mesmo instante. É essa dispersão que faz o clima valer como variável: uma tabela
-de tempo só, de um ponto só, descreveria o lugar errado em três das quatro pastas.
+São dezesseis cidades e seis estados: entre Canoas e Belém há mais de três mil quilômetros
+e dois regimes de chuva diferentes — em agosto, 8 °C na Grande Porto Alegre contra 27 °C
+no Pará, no mesmo instante. É essa dispersão que faz o clima valer como variável: uma
+tabela de tempo só, de um ponto só, descreveria o lugar errado em vinte das vinte e uma
+pastas.
 
-> Duas arenas ficaram **fora da lista por ora**, e o código que as atende continua no
-> lugar. A **Arena Grings** (Igrejinha, RS) não vende pela web — o site responde "Local
-> indisponível para marcações pela web" no lugar do campo de data, e sem quadra não há o
-> que casar com o tempo. A **AABB Camaquã** (Camaquã, RS) coleta de forma intermitente:
-> o site carimba a data no campo e às vezes não carrega a agenda, e a arena volta vazia.
-> Reentrar com qualquer uma das duas é reacrescentar a linha no `ARENAS`.
+> **Oito arenas estão na lista e não entregam quadra**, cada uma por um motivo que o log
+> nomeia. **Arena Grings** e **CT Kliks** não vendem pela web: o site responde "Local
+> indisponível para marcações pela web" no lugar do campo de data, e a rodada encerra
+> aquela arena em cinco segundos, com o aviso e sem linha no CSV. **Na 5 Beach Sport**
+> pede login — a página anuncia "Faça seu login" e a agenda não abre para quem não entrou.
+> **Arena Total 90**, **Ginásio Bigornão Futsal**, **MB Arena**, **My Beach Sport** e
+> **Table Tennis Place** usam o outro fluxo de reserva: escolhida a data, elas pedem
+> "Escolha uma quadra" antes de mostrar horário nenhum, e o coletor espera a lista inteira
+> de uma vez. O JSON da arena entrega quais são antes de abrir o navegador — é o campo
+> `tipo_selecao_horario`, que vale `lista_turno_duracao` exatamente nessas cinco e
+> `lista_turno` em todas as vinte e uma que coletam. Elas ficam na lista porque o dia em
+> que o segundo fluxo for implementado é uma linha a menos para reescrever; o preço é o
+> tempo que gastam por rodada sem trazer nada.
 
 ## O que ele faz
 
@@ -58,10 +85,10 @@ dos demais; **uma arena que falhe inteira também** — a lista de sites não fi
 pior deles. Uma execução que não colete nada em arena nenhuma sai com código de erro, em
 vez de gravar silêncio — o modo de falha mais caro num coletor agendado.
 
-### Três formas de a mesma página aparecer
+### Cinco formas de a mesma página aparecer
 
 O front é um só, mas cada arena o preenche com o que tem, e o passo 2 acima esbarra nas
-três formas:
+cinco formas:
 
 - **Vários esportes.** A lista aparece e a coleta clica no esporte pedido. É o caso da SP
   Sports.
@@ -73,8 +100,15 @@ três formas:
   pela web"* — a arena existe, publica o endereço, e não vende por ali. Reconhecer o aviso
   encerra o esporte na hora, com `aviso` na saída e nenhuma linha no CSV; sem isso a coleta
   insistiria no calendário em cada dia do horizonte, a cada esporte, a cada quinze minutos.
-  Nenhuma arena da lista está nesse estado hoje — foi a Grings que o revelou —, e o
-  reconhecimento fica porque qualquer uma pode entrar nele de uma semana para a outra.
+  Grings e CT Kliks estão nesse estado.
+- **Atrás de login.** A página lista os esportes, mas escolher um não abre agenda nenhuma:
+  o que vem é *"Faça seu login"*. Não há aviso a reconhecer, então a arena gasta o tempo de
+  espera e volta vazia. É a Na 5 Beach Sport.
+- **Escolha por quadra.** Escolhida a data, a arena pede *"Escolha uma quadra"* e só depois
+  mostra horário — é o outro fluxo de reserva do mesmo Bubble, e o coletor lê a lista de
+  quadras toda de uma vez. **Não é preciso abrir o navegador para saber quem faz assim**:
+  o `tipo_selecao_horario` do `/api/1.1/init/data` vale `lista_turno_duracao` nessas e
+  `lista_turno` nas que o coletor já lê.
 
 **A troca de período é confirmada pelo realce do botão**, e não por o conteúdo mudar. A
 página abre com um período já escolhido — Noite, em todas as arenas vistas até aqui —, e
@@ -87,7 +121,7 @@ anterior.
 
 | Arquivo | Papel |
 | --- | --- |
-| `main.py` | **Ponto de entrada.** Percorre as arenas, chama os coletores em sequência e manda gravar |
+| `main.py` | **Ponto de entrada.** Roda as arenas em paralelo, chama os coletores de cada uma e manda gravar |
 | `config.py` | O que se edita: lista de arenas, tipos de quadra, diretório de saída |
 | `courts_collector.py` | Coleta das reservas e do endereço — API JSON e navegador. É biblioteca, não roda sozinho |
 | `localizacao.py` | Traduz o endereço da arena em coordenadas, e lembra o resultado |
@@ -138,7 +172,18 @@ para a mesma quadra.
 > aparece em Vôlei de praia e em Beach Tennis, e o mesmo ginásio costuma aparecer em
 > futsal, vôlei, basquete e handebol —, o catálogo escolhe **um**. Coletar mais de um
 > gravaria o mesmo horário uma vez por esporte, e uma reserva viraria várias linhas no
-> dataset.
+> dataset. A Vila Society é a demonstração: Beach Tennis e Futevôlei devolvem as mesmas
+> `Areia 1`, `Areia 2` e `Areia 3`.
+
+**Qual dos esportes escolher não é livre.** Na maioria das arenas o dono pendurou as
+quadras em **um** dos esportes que anuncia, e os outros existem só na vitrine: escolher o
+errado devolve zero quadra, sem erro, gastando o horizonte inteiro de dias tentando. Foi
+assim que a lista saiu — abrindo cada arena e vendo qual esporte tem agenda. Não há padrão
+a decorar: a AABB Camaquã anuncia futsal, vôlei, basquete e handebol, e o ginásio está no
+**handebol**; a Beach Brasil e a Ravena Beach penduraram a areia no **futevôlei**; a Beach
+Place Poa, no **beach tennis**; a Trescopark, no **vôlei de praia**. Arena nova entra pelo
+mesmo caminho, e o `pytest -m rede -k toda_arena_ainda_oferece` avisa quando um site
+renomeia o esporte por baixo.
 
 Uma quarta chave, opcional, é a saída de emergência:
 
@@ -152,8 +197,8 @@ reconhece. Sem elas — o caso normal —, o endereço publicado pela arena bast
 `DIAS_A_FRENTE` é o quanto a coleta enxerga além de hoje. É o parâmetro que decide quanta
 antecedência de reserva o histórico consegue registrar, e o que mais pesa no tempo de
 execução: cada dia a mais custa por volta de **8 segundos por esporte coletado** — hoje são
-sete. O site libera 60 dias, então o teto é prático, não do site. A previsão acompanha o
-mesmo horizonte automaticamente.
+trinta e um. O site libera 60 dias, então o teto é prático, não do site. A previsão
+acompanha o mesmo horizonte automaticamente.
 
 > Ele vale **5** desde que a lista deixou de ter uma arena só. Com 14, a rodada completa
 > não cabia no intervalo de 15 minutos do `cron`; com 5, sobra folga. O preço está
@@ -161,6 +206,20 @@ mesmo horizonte automaticamente.
 > e o histórico a registra com `primeira_coleta` preenchida e `reservado_em` vazia — "já
 > chegou ocupada", e não "ninguém reservou". Subir o número de volta é refazer a conta do
 > limite de execução junto.
+
+`ARENAS_EM_PARALELO` é quantas arenas rodam ao mesmo tempo. Elas são independentes por
+construção — navegador, diretório, endereço e clima próprios —, então o paralelismo não
+precisou de trava nenhuma na gravação: cada uma escreve só na pasta dela. A exceção é a
+**geocodificação**, que roda com trava e uma arena de cada vez, porque o Nominatim é um
+serviço público que pede no máximo uma consulta por segundo e a primeira rodada de uma
+lista nova resolveria as 29 de uma vez. O log continua legível porque cada arena guarda o
+que imprimiria e só solta o bloco inteiro quando termina; sem isso, quatro arenas
+escrevendo ao mesmo tempo entrelaçariam as linhas.
+
+> Vale **4**. O teto não é o processador — a coleta passa o tempo esperando o site —, é a
+> **memória**: cada arena no ar segura um Chromium, uns 400 MB, e estourar a RAM derruba a
+> rodada inteira. Com 29 arenas em sequência a rodada passaria de **50 minutos**; com
+> quatro ao mesmo tempo, fica em **12**.
 
 ## O endereço, e as coordenadas que saem dele
 
@@ -466,6 +525,9 @@ python main.py          # roda sem abrir janela (headless)
 python main.py --ver    # abre o navegador pra você ASSISTIR o passo a passo
 ```
 
+Com `--ver` abrem `ARENAS_EM_PARALELO` janelas ao mesmo tempo, uma por arena em coleta.
+Para acompanhar uma só, baixe o valor para 1.
+
 ## Testes
 
 ```bash
@@ -535,21 +597,28 @@ distinguível do 1.
 
 **O limite é a conta que precisa ser refeita a cada arena acrescentada.** O que custa não é
 a arena, é o **esporte**: cada um abre o seu próprio navegador e percorre o horizonte
-inteiro de dias, um dia de cada vez. A SP Sports coleta quatro; as outras três, um cada.
-Medido no `execucoes.csv`, um dia de um esporte custa por volta de **8 segundos**:
+inteiro de dias, um dia de cada vez. Medido no `execucoes.csv`, um dia de um esporte custa
+por volta de **8 segundos**. O que divide a conta é `ARENAS_EM_PARALELO`: as arenas rodam
+ao mesmo tempo, cada uma com navegador, diretório e clima próprios:
 
 ```
-LIMITE  ≈  8s × n_esportes × (DIAS_A_FRENTE + 1)
+LIMITE  ≈  8s × n_esportes × (DIAS_A_FRENTE + 1) / ARENAS_EM_PARALELO
 ```
 
-Com os sete esportes de hoje e `DIAS_A_FRENTE = 5`, dá por volta de **6 minutos**. Foi essa
-conta que baixou o horizonte de 14 para 5 quando a lista deixou de ter uma arena só: com
-14 passaria dos 15 minutos do `cron`, e a SP Sports sozinha já levava 8 — que é o que o
-`execucoes.csv` registrava quando ela era a única.
+Com as 29 arenas da lista, `DIAS_A_FRENTE = 5` e quatro arenas ao mesmo tempo, a rodada dá
+por volta de **11 minutos** — contra quase uma hora se fossem uma de cada vez, que é o que
+tirou a lista inteira de dentro do intervalo do `cron` e obrigou o paralelismo.
 
-`LIMITE_DE_EXECUCAO`, no topo de `scripts/rodar_extracao.sh`, é onde ela entra — `12m`, com
-folga para as rodadas ruins e ainda abaixo do intervalo do `cron`. Duas coisas a olhar
-junto: um limite **curto** demais corta a rodada no meio, e as arenas do fim da lista nunca
+O paralelismo tem dois tetos. O de **memória**: cada arena no ar segura um Chromium, uns
+400 MB, e estourar a RAM da máquina derruba a rodada inteira, não só a arena. O de
+**educação com o site**: as 29 são o mesmo domínio, e subir demais o número transforma a
+coleta em rajada. Quatro é o que coube na máquina de hoje com o desktop em uso; a
+geocodificação fica de fora dessa conta de propósito — o Nominatim pede no máximo uma
+consulta por segundo, então ela acontece com trava, uma arena de cada vez.
+
+`LIMITE_DE_EXECUCAO`, no topo de `scripts/rodar_extracao.sh`, é onde a conta entra — `14m`,
+com folga para as rodadas ruins e ainda abaixo do intervalo do `cron`. Duas coisas a olhar
+junto: um limite **curto** demais corta a rodada no meio, e as arenas do fim da fila nunca
 chegam a ser coletadas; um limite **maior que o intervalo do cron** faz a rodada seguinte
 encontrar a trava tomada e sair pulando — o `flock` protege o dataset, mas a cadência real
 deixa de ser a que está no crontab. Passando disso, o intervalo é que precisa crescer.
@@ -586,7 +655,7 @@ Não há e-mail: a máquina não tem MTA, e o `MAILTO=""` declara isso em vez de
 ```bash
 tail .logs/execucoes.csv                            # instante, código e duração por rodada
 awk -F, 'NR > 1 && $2 != 0' .logs/execucoes.csv     # só as que falharam
-journalctl -t extrator-sp-sports -p err --since today
+journalctl -t extrator-quadras -p err --since today
 less .logs/extracao-$(date +%F).log                 # o relatório completo da rodada
 ```
 

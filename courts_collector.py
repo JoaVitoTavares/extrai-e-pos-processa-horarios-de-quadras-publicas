@@ -61,6 +61,7 @@ SCRIPT_PERIODO_ESCOLHIDO = """
 """
 FORMATO_DIA_NO_CALENDARIO = "%d/%m/%y"
 ESPERA_CALENDARIO_MS = 3_000
+ESPERA_REPINTE_DA_GRADE_MS = 500
 ESPERA_HORARIOS_MS = 6_000
 TEXTO_HORARIOS_DISPONIVEIS = "Horários disponíveis"
 FUNDO_SEM_REALCE = "rgba(0, 0, 0, 0)"
@@ -107,6 +108,10 @@ def api_init_de(url_arena: str) -> str:
 
 
 def listar_esportes(url_arena: str) -> list[str]:
+    """Lista os esportes que a arena publica, sem os espaços das pontas. O site aceita o
+    nome como o dono digitou, e um " Futebol society" com espaço à esquerda não casa com o
+    texto da tela, que vem aparado: o clique no esporte erra o item e a leitura do endereço
+    não acha por onde começar — a arena coleta os horários e fica sem clima."""
     resposta = requests.get(
         api_init_de(url_arena),
         params={"location": url_arena},
@@ -116,7 +121,7 @@ def listar_esportes(url_arena: str) -> list[str]:
     resposta.raise_for_status()
     dados = resposta.json()
     try:
-        return dados[0]["data"]["esportes_list_text"]
+        return [nome.strip() for nome in dados[0]["data"]["esportes_list_text"]]
     except (KeyError, IndexError, TypeError) as erro:
         raise ValueError(
             f"{api_init_de(url_arena)} devolveu JSON em formato inesperado: {erro}"
@@ -183,11 +188,11 @@ def _tentar_o_dia(pagina, rotulo: str, timeout_ms: int) -> bool:
     """Abre o calendário pelo campo de data, avança o mês se a data não estiver na grade,
     clica na célula e diz se a escolha pegou. O clique no campo não é cerimônia: com os
     horários na tela um bloco do Bubble cobre as células, e é `picker--opened` que traz a
-    grade para a frente. Quem confirma é o valor do campo, e não a classe da célula: a
-    grade é repintada no meio do caminho e o clique às vezes se perde nessa troca. Não
-    achando a célula nem no mês seguinte, desiste da tentativa em vez de esperar por ela:
-    reabrir o calendário o repinta em torno da data selecionada, e é de lá que a tentativa
-    seguinte parte — insistir na grade que já ficou para trás custaria o dia inteiro."""
+    grade para a frente. O respiro antes do clique espera o repinte que vem logo depois de
+    abrir: sem ele o clique cai na grade velha e se perde, e a arena não fixa dia nenhum
+    em tentativa nenhuma — quem confirma é o valor do campo, e não a classe da célula. Não
+    achando a célula nem no mês seguinte, desiste em vez de insistir na grade que ficou
+    para trás: reabrir o calendário a repinta, e é de lá que a tentativa seguinte parte."""
     pagina.locator(".picker__input").first.click(timeout=timeout_ms)
     pagina.locator(".picker--opened").first.wait_for(state="attached", timeout=timeout_ms)
 
@@ -200,6 +205,7 @@ def _tentar_o_dia(pagina, rotulo: str, timeout_ms: int) -> bool:
             celula.first.wait_for(state="visible", timeout=ESPERA_CALENDARIO_MS)
         except PWTimeout:
             return False
+    pagina.wait_for_timeout(ESPERA_REPINTE_DA_GRADE_MS)
     celula.first.click()
 
     try:
