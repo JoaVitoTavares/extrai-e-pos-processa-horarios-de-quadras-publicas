@@ -10,6 +10,25 @@ A coleta percorre uma **lista de arenas**, e não um site só. Todas compartilha
 front, então o mesmo coletor serve para todas; o que muda é a URL, e com ela as quadras,
 o endereço e — o ponto que faz diferença no dado — **a cidade em que o tempo é medido**.
 
+| Arena | Cidade | Quadras |
+| --- | --- | --- |
+| SP Sports | Canoas, RS | Vôlei de praia, Futebol de salão, Grama 7, Grama 5 |
+| Arena Sabino Futebol Society | Belém, PA | Futebol society |
+| Arena Grenal | Alvorada, RS | Futebol society |
+| Arena Darc Sports | Ananindeua, PA | Futebol society |
+
+São quatro cidades e dois estados: entre Canoas e Belém há mais de três mil quilômetros e
+dois regimes de chuva diferentes — em agosto, 8 °C na Grande Porto Alegre contra 27 °C no
+Pará, no mesmo instante. É essa dispersão que faz o clima valer como variável: uma tabela
+de tempo só, de um ponto só, descreveria o lugar errado em três das quatro pastas.
+
+> Duas arenas ficaram **fora da lista por ora**, e o código que as atende continua no
+> lugar. A **Arena Grings** (Igrejinha, RS) não vende pela web — o site responde "Local
+> indisponível para marcações pela web" no lugar do campo de data, e sem quadra não há o
+> que casar com o tempo. A **AABB Camaquã** (Camaquã, RS) coleta de forma intermitente:
+> o site carimba a data no campo e às vezes não carrega a agenda, e a arena volta vazia.
+> Reentrar com qualquer uma das duas é reacrescentar a linha no `ARENAS`.
+
 ## O que ele faz
 
 Para **cada arena** de `ARENAS`:
@@ -20,8 +39,8 @@ esportes disponíveis direto do JSON, sem abrir o Chromium.
 
 **Técnica 2 — navegador headless (Playwright).**
 1. Abre a URL da arena
-2. Percorre os **quatro tipos de quadra de interesse** — Vôlei de praia, Futebol de
-   salão, Grama 7 e Grama 5 — ignorando os demais esportes do site
+2. Percorre os **tipos de quadra que aquela arena declara no config**, ignorando os demais
+   esportes do site
 3. Lê o **endereço** que a arena publica logo abaixo do esporte escolhido, de onde saem
    as coordenadas do clima
 4. Para cada um, percorre o **dia atual e os próximos** (`DIAS_A_FRENTE`), achando cada
@@ -38,6 +57,31 @@ Um esporte que falhe por lentidão do site é reportado e pulado, sem derrubar a
 dos demais; **uma arena que falhe inteira também** — a lista de sites não fica refém do
 pior deles. Uma execução que não colete nada em arena nenhuma sai com código de erro, em
 vez de gravar silêncio — o modo de falha mais caro num coletor agendado.
+
+### Três formas de a mesma página aparecer
+
+O front é um só, mas cada arena o preenche com o que tem, e o passo 2 acima esbarra nas
+três formas:
+
+- **Vários esportes.** A lista aparece e a coleta clica no esporte pedido. É o caso da SP
+  Sports.
+- **Um esporte só.** A página já abre com ele escolhido, e o item da lista fica na página
+  **escondido**. Clicar ali é esperar por um elemento que nunca fica visível, e era assim
+  que Sabino, Grenal e Darc saíam da rodada por tempo esgotado, sem coletar nada. Quando o
+  campo de data já está na tela, não há o que clicar.
+- **Sem agenda na web.** No lugar do campo de data vem *"Local indisponível para marcações
+  pela web"* — a arena existe, publica o endereço, e não vende por ali. Reconhecer o aviso
+  encerra o esporte na hora, com `aviso` na saída e nenhuma linha no CSV; sem isso a coleta
+  insistiria no calendário em cada dia do horizonte, a cada esporte, a cada quinze minutos.
+  Nenhuma arena da lista está nesse estado hoje — foi a Grings que o revelou —, e o
+  reconhecimento fica porque qualquer uma pode entrar nele de uma semana para a outra.
+
+**A troca de período é confirmada pelo realce do botão**, e não por o conteúdo mudar. A
+página abre com um período já escolhido — Noite, em todas as arenas vistas até aqui —, e
+clicar naquele não muda texto nenhum: uma arena que só venda à noite ficaria de fora
+inteira, com os horários na tela o tempo todo. Trocado o realce, o conteúdo ainda precisa
+acompanhar antes da leitura, senão o que se grava no período novo são os horários do
+anterior.
 
 ## Os módulos
 
@@ -63,7 +107,11 @@ lista de arenas:
 ```python
 ARENAS = [
     {"nome": "SP Sports", "url": "https://webarena.app/arena/sp-sports"},
-    {"nome": "Arena Parobé", "url": "https://webarena.app/arena/outra-quadra"},
+    {
+        "nome": "Arena Grenal",
+        "url": "https://webarena.app/arena/arena-grenal",
+        "tipos": ["Futebol society"],
+    },
 ]
 ```
 
@@ -74,7 +122,25 @@ grava**, tirado do último trecho da URL. O `nome` é o que vai à coluna `arena
 falta dele, vale o identificador da URL. É a URL que identifica a arena, e não o nome:
 renomear no config não desgarra o histórico já coletado.
 
-Uma terceira chave, opcional, é a saída de emergência:
+`tipos` é o **catálogo daquela arena**: os tipos de quadra que a coleta procura na lista
+de esportes do site. Sem ele vale `TIPOS_QUADRA`, o padrão de quatro tipos que a primeira
+arena usa. Cada site vende o que quer — só futebol society, só o ginásio, areia em três
+esportes diferentes —, e uma lista fixa para todas deixaria as demais voltando vazias sem
+erro nenhum.
+
+A grafia que se escreve aqui é a que vai para a coluna `tipo_quadra` do CSV, e a
+comparação com o site ignora acento, caixa e a diferença entre futsal e futebol de salão.
+É por isso que `"Futebol society"` casa com o `Futebol Society` da Arena Darc e com o
+`Futebol society` da Grenal: no dataset as duas viram um tipo só, em vez de dois nomes
+para a mesma quadra.
+
+> Quando um site oferece **vários esportes na mesma quadra física** — a areia da SP Sports
+> aparece em Vôlei de praia e em Beach Tennis, e o mesmo ginásio costuma aparecer em
+> futsal, vôlei, basquete e handebol —, o catálogo escolhe **um**. Coletar mais de um
+> gravaria o mesmo horário uma vez por esporte, e uma reserva viraria várias linhas no
+> dataset.
+
+Uma quarta chave, opcional, é a saída de emergência:
 
 ```python
     {"nome": "Arena X", "url": "...", "coordenadas": (-29.65, -50.81)},
@@ -85,9 +151,16 @@ reconhece. Sem elas — o caso normal —, o endereço publicado pela arena bast
 
 `DIAS_A_FRENTE` é o quanto a coleta enxerga além de hoje. É o parâmetro que decide quanta
 antecedência de reserva o histórico consegue registrar, e o que mais pesa no tempo de
-execução: cada dia a mais custa por volta de meio minuto **por arena**. O site libera 60
-dias, então o teto é prático, não do site. A previsão acompanha o mesmo horizonte
-automaticamente.
+execução: cada dia a mais custa por volta de **8 segundos por esporte coletado** — hoje são
+sete. O site libera 60 dias, então o teto é prático, não do site. A previsão acompanha o
+mesmo horizonte automaticamente.
+
+> Ele vale **5** desde que a lista deixou de ter uma arena só. Com 14, a rodada completa
+> não cabia no intervalo de 15 minutos do `cron`; com 5, sobra folga. O preço está
+> anotado: **reserva feita com mais de cinco dias de antecedência chega já indisponível**,
+> e o histórico a registra com `primeira_coleta` preenchida e `reservado_em` vazia — "já
+> chegou ocupada", e não "ninguém reservou". Subir o número de volta é refazer a conta do
+> limite de execução junto.
 
 ## O endereço, e as coordenadas que saem dele
 
@@ -158,7 +231,12 @@ o clima do lugar velho não é o dela.
 │   ├── clima-previsoes.csv
 │   ├── areia-1-interna-extracoes.csv
 │   └── futsal-interna-extracoes.csv
-└── outra-quadra/
+├── arena-grenal/
+│   ├── local.json
+│   ├── clima-leituras.csv
+│   ├── clima-previsoes.csv
+│   └── society-extracoes.csv
+└── arena-darc-sports/
     ├── local.json
     └── ...
 ```
@@ -182,9 +260,15 @@ para preencher `feriado`, `evento_grande` e `jogo_em_porto_alegre`, que dependem
 > geocodificador falhar não apaga a cidade que a anterior descobriu, e a que a descobrir
 > preenche as linhas que já estavam gravadas — enquanto o horário não tiver chegado.
 
-Outras duas colunas saem do nome da quadra: `tipo_quadra`, normalizada para `Vôlei de
-praia`, `Futebol de salão`, `Grama 7` ou `Grama 5`; e `quadra_coberta`, `true` para
-interna/coberta e `false` para externa/descoberta.
+Outras duas colunas dizem que quadra é aquela: `tipo_quadra`, o esporte escolhido
+normalizado para a grafia do `tipos` da arena — `Vôlei de praia`, `Futebol de salão`,
+`Grama 7`, `Grama 5`, `Futebol society` —; e `quadra_coberta`, que sai do **nome** da
+quadra: `true` para interna, coberta ou ginásio, `false` para externa ou descoberta.
+
+> `quadra_coberta` fica **vazia** quando o nome não diz — `SFS`, `Society`, `Arena 1`. É
+> lacuna assumida, e não `false`: as arenas de futebol society não anunciam a cobertura no
+> nome da quadra, e chutar "descoberta" para todas afirmaria no dataset uma coisa que
+> ninguém observou. O `tipo_quadra` daquela linha é o que sobra para responder a pergunta.
 
 ### Migrando o histórico que já existe
 
@@ -449,20 +533,32 @@ Um `timeout` fecha o terceiro buraco: sem ele, um Chromium travado seguraria a t
 sempre e mataria todas as coletas seguintes. Quando ele dispara, o código é 124,
 distinguível do 1.
 
-**O limite é a conta que precisa ser refeita a cada arena acrescentada.** Uma rodada leva
-por volta de 2min30s por arena com `DIAS_A_FRENTE = 2`, e cada dia a mais custa cerca de
-meio minuto — também por arena, porque as arenas rodam em sequência:
+**O limite é a conta que precisa ser refeita a cada arena acrescentada.** O que custa não é
+a arena, é o **esporte**: cada um abre o seu próprio navegador e percorre o horizonte
+inteiro de dias, um dia de cada vez. A SP Sports coleta quatro; as outras três, um cada.
+Medido no `execucoes.csv`, um dia de um esporte custa por volta de **8 segundos**:
 
 ```
-LIMITE  ≈  n_arenas × (2min30s + 0min30s × (DIAS_A_FRENTE - 2))
+LIMITE  ≈  8s × n_esportes × (DIAS_A_FRENTE + 1)
 ```
 
-`LIMITE_DE_EXECUCAO`, no topo de `scripts/rodar_extracao.sh`, é onde ela entra. Duas coisas
-a olhar junto: um limite **curto** demais corta a rodada no meio, e as arenas do fim da
-lista nunca chegam a ser coletadas; um limite **maior que o intervalo do cron** faz a
-rodada seguinte encontrar a trava tomada e sair pulando — o `flock` protege o dataset, mas
-a cadência real deixa de ser a que está no crontab. Passando disso, o intervalo é que
-precisa crescer.
+Com os sete esportes de hoje e `DIAS_A_FRENTE = 5`, dá por volta de **6 minutos**. Foi essa
+conta que baixou o horizonte de 14 para 5 quando a lista deixou de ter uma arena só: com
+14 passaria dos 15 minutos do `cron`, e a SP Sports sozinha já levava 8 — que é o que o
+`execucoes.csv` registrava quando ela era a única.
+
+`LIMITE_DE_EXECUCAO`, no topo de `scripts/rodar_extracao.sh`, é onde ela entra — `12m`, com
+folga para as rodadas ruins e ainda abaixo do intervalo do `cron`. Duas coisas a olhar
+junto: um limite **curto** demais corta a rodada no meio, e as arenas do fim da lista nunca
+chegam a ser coletadas; um limite **maior que o intervalo do cron** faz a rodada seguinte
+encontrar a trava tomada e sair pulando — o `flock` protege o dataset, mas a cadência real
+deixa de ser a que está no crontab. Passando disso, o intervalo é que precisa crescer.
+
+> **É a conta que decidiu `DIAS_A_FRENTE = 5`.** Mantido o horizonte de 14, a rodada
+> passaria dos 15 minutos do `cron`: uma em cada duas execuções encontraria a trava
+> tomada, e a cadência real — não a do crontab — viraria a resolução de `reservado_em`.
+> Encurtar o horizonte foi o caminho escolhido para manter os 15 minutos; o outro seria
+> subir o intervalo para 30 e assumir a resolução no texto.
 
 ### Por que 15 minutos, o dia inteiro
 
@@ -513,8 +609,8 @@ regime — o relatório cresceu junto com os dias coletados. `.logs/` fica fora 
   virada já é detectada na gravação, falta o aviso
 - Parametrizar arena/esporte/período/data via argumentos de linha de comando
   (a função `coletar_horarios` já aceita `esporte`, `url_arena`, `periodo` e
-  `dias_a_frente`; o `main.py` percorre todas as arenas e os quatro tipos de quadra, mas
-  não aceita recorte pela linha de comando)
+  `dias_a_frente` e `tipos`; o `main.py` percorre todas as arenas e o catálogo de cada
+  uma, mas não aceita recorte pela linha de comando)
 - Preencher `feriado`, `evento_grande` e `jogo_em_porto_alegre`, as três colunas de
   contexto que existem no CSV e ainda nascem vazias — agora que a coluna `cidade` diz a
   que lugar cada linha se refere, as três passam a ser respondíveis para arenas de

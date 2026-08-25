@@ -101,3 +101,24 @@ def test_tipos_ausentes_lista_o_que_sumiu_do_site():
 
 def test_tipos_ausentes_reconhece_o_nome_sem_acento():
     assert "Vôlei de praia" not in courts_collector.tipos_ausentes(["Volei de praia"])
+
+
+@pytest.mark.parametrize(
+    "do_site, tipos, esperado",
+    [
+        (["Futebol society"], ["Futebol society"], ["Futebol society"]),
+        (["Futebol Society"], ["Futebol society"], ["Futebol Society"]),
+        (["Futsal", "Vôlei", "Basquete"], ["Futebol de salão"], ["Futsal"]),
+        (["Beach Tennis", "Futevôlei", "Vôlei de Praia"], ["Vôlei de praia"], ["Vôlei de Praia"]),
+        (ESPORTES, ["Grama 7"], ["Grama 7"]),
+    ],
+)
+def test_esportes_alvo_usa_o_catalogo_da_arena(do_site, tipos, esperado):
+    """Cada arena tem o seu catálogo de quadras, e é ele que decide o que procurar naquele
+    site — sem isso, a arena que só vende futebol society não teria nada a coletar."""
+    assert courts_collector.esportes_alvo(do_site, tipos) == esperado
+
+
+def test_tipos_ausentes_pergunta_pelo_catalogo_da_arena():
+    assert courts_collector.tipos_ausentes(["Futebol society"], ["Futebol society"]) == []
+    assert courts_collector.tipos_ausentes([], ["Futebol society"]) == ["Futebol society"]

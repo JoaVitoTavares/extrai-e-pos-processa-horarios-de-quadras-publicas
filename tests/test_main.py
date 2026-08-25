@@ -258,10 +258,10 @@ def test_sai_com_erro_quando_nao_grava_nada(monkeypatch):
 
 def test_esporte_que_estoura_o_tempo_nao_derruba_os_outros(monkeypatch, capsys):
     monkeypatch.setattr(main, "listar_esportes", lambda url_arena: ["Grama 7", "Grama 5"])
-    monkeypatch.setattr(main, "esportes_alvo", lambda esportes: esportes)
-    monkeypatch.setattr(main, "tipos_ausentes", lambda alvos: [])
+    monkeypatch.setattr(main, "esportes_alvo", lambda esportes, tipos: esportes)
+    monkeypatch.setattr(main, "tipos_ausentes", lambda alvos, tipos: [])
 
-    def coletar(esporte, url_arena, periodo=None, headless=True):
+    def coletar(esporte, url_arena, periodo=None, headless=True, tipos=None):
         if esporte == "Grama 7":
             raise PWTimeout("tempo esgotado")
         return [quadra(nome="Grama 5 - Interna")]
@@ -276,11 +276,11 @@ def test_esporte_que_estoura_o_tempo_nao_derruba_os_outros(monkeypatch, capsys):
 def test_modo_visivel_desliga_o_headless(monkeypatch):
     recebido = {}
     monkeypatch.setattr(main, "listar_esportes", lambda url_arena: ["Grama 5"])
-    monkeypatch.setattr(main, "esportes_alvo", lambda esportes: esportes)
-    monkeypatch.setattr(main, "tipos_ausentes", lambda alvos: [])
+    monkeypatch.setattr(main, "esportes_alvo", lambda esportes, tipos: esportes)
+    monkeypatch.setattr(main, "tipos_ausentes", lambda alvos, tipos: [])
     monkeypatch.setattr(
         main, "coletar_horarios",
-        lambda esporte, url_arena, periodo=None, headless=True:
+        lambda esporte, url_arena, periodo=None, headless=True, tipos=None:
             recebido.update(headless=headless, url=url_arena) or [],
     )
 
@@ -288,6 +288,28 @@ def test_modo_visivel_desliga_o_headless(monkeypatch):
 
     assert recebido["headless"] is False
     assert recebido["url"] == ARENA["url"]
+
+
+def test_arena_procura_os_tipos_de_quadra_que_ela_declara(monkeypatch):
+    """Cada arena tem o seu catálogo, e é ele que decide o que a coleta procura naquele
+    site: pedir os tipos da primeira arena numa que só tem futebol society faria a coleta
+    olhar a lista de esportes, não achar nenhum e voltar de mãos vazias sem erro nenhum."""
+    recebido = {}
+    monkeypatch.setattr(main, "listar_esportes", lambda url_arena: ["Futebol society"])
+    monkeypatch.setattr(
+        main, "coletar_horarios",
+        lambda esporte, url_arena, periodo=None, headless=True, tipos=None:
+            recebido.update(esporte=esporte, tipos=tipos) or [],
+    )
+    arena = dict(OUTRA_ARENA, tipos=["Futebol society"])
+
+    main.coletar_quadras(main.preparar_arena(arena))
+
+    assert recebido == {"esporte": "Futebol society", "tipos": ["Futebol society"]}
+
+
+def test_arena_sem_tipos_proprios_usa_os_padrao():
+    assert main.preparar_arena(ARENA)["tipos"] == main.TIPOS_QUADRA
 
 
 def test_imprime_livre_e_indisponivel_com_marcas_diferentes(capsys):

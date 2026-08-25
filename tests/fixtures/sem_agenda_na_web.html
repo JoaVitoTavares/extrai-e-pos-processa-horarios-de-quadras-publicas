@@ -1,0 +1,24 @@
+<!-- arena que não vende pela web: no lugar do campo de data vem o aviso, e ele nunca aparece -->
+<div class="bubble-element RepeatingGroup baTaOno0 bubble-rg">
+  <div class="bubble-element group-item bubble-r-container flex column entry-1">
+    <div class="bubble-element Text baTaOoaA0 clickable-element bubble-r-vertical-center"
+         onclick="escolher()" style="min-height: 50px; font-size: 15px;">
+      <div>Beach Tennis</div>
+    </div>
+  </div>
+</div>
+<div id="aviso" style="display: none;">
+  <div class="bubble-element Text baTaRaAd" style="min-height: 50px;">
+    <div>Marechal Arthur da Costa e Silva 356, Igrejinha</div>
+  </div>
+  <div class="bubble-element Text baTaRaBaZ" style="min-height: 50px;">
+    <div>Local indisponível para marcações pela web.</div>
+    <div>Entre em contato com o administrador do estabelecimento.</div>
+  </div>
+</div>
+<script>
+  function escolher() {
+    document.querySelector('.bubble-rg').style.display = 'none';
+    document.getElementById('aviso').style.display = 'block';
+  }
+</script>

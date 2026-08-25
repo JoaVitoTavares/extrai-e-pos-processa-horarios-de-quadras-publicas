@@ -25,7 +25,7 @@ def capturar(pagina, esporte: str, periodo: str) -> str:
     """Navega até o esporte, o dia de hoje e o período pedidos e devolve o outerHTML do
     RepeatingGroup de quadras, que é o trecho que as fixtures precisam congelar."""
     pagina.goto(ARENA, wait_until="networkidle", timeout=60_000)
-    pagina.get_by_text(esporte, exact=True).first.click()
+    courts_collector._escolher_esporte(pagina, esporte, timeout_ms=15_000)
 
     hoje = pagina.locator(".picker__day--today").first
     hoje.wait_for(state="visible", timeout=15_000)

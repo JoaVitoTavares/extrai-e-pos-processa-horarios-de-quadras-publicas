@@ -5,7 +5,7 @@ import sys
 import requests
 from playwright.sync_api import TimeoutError as PWTimeout
 
-from config import ARENAS, DIRETORIO_EXTRACOES
+from config import ARENAS, DIRETORIO_EXTRACOES, TIPOS_QUADRA
 from courts_collector import coletar_horarios, esportes_alvo, listar_esportes, tipos_ausentes
 from localizacao import endereco_observado, resolver_local
 from persistencia import salvar_extracao, slug
@@ -18,13 +18,15 @@ def preparar_arena(arena: dict) -> dict:
     `arena` do CSV, e o diretório onde ela grava, tirado do último trecho da URL. É a URL
     que identifica o site, então renomear a arena no config não desgarra o histórico já
     coletado. Coordenadas fixadas à mão passam adiante como estão, para o endereço que o
-    mapa não reconhece não custar o clima daquela arena."""
+    mapa não reconhece não custar o clima daquela arena. Sem `tipos` próprios, a arena
+    procura os tipos de quadra padrão."""
     identificador = slug(arena["url"].rstrip("/").rsplit("/", 1)[-1])
     return {
         "nome": arena.get("nome") or identificador,
         "url": arena["url"],
         "diretorio": os.path.join(DIRETORIO_EXTRACOES, identificador),
         "coordenadas": arena.get("coordenadas"),
+        "tipos": arena.get("tipos") or TIPOS_QUADRA,
     }
 
 
@@ -37,8 +39,8 @@ def coletar_quadras(arena: dict, modo_visivel: bool = False) -> list[dict]:
     for i, e in enumerate(esportes, 1):
         print(f"   {i}. {e}")
 
-    alvos = esportes_alvo(esportes)
-    ausentes = tipos_ausentes(alvos)
+    alvos = esportes_alvo(esportes, arena["tipos"])
+    ausentes = tipos_ausentes(alvos, arena["tipos"])
     if ausentes:
         print(f"\n[AVISO] tipos de quadra não encontrados no site: {', '.join(ausentes)}")
 
@@ -47,7 +49,13 @@ def coletar_quadras(arena: dict, modo_visivel: bool = False) -> list[dict]:
         print(f"\n>> TÉCNICA 2 (Playwright): horários de '{esporte}' (todos os períodos)...")
         try:
             resultados.extend(
-                coletar_horarios(esporte, arena["url"], periodo=None, headless=not modo_visivel)
+                coletar_horarios(
+                    esporte,
+                    arena["url"],
+                    periodo=None,
+                    headless=not modo_visivel,
+                    tipos=arena["tipos"],
+                )
             )
         except PWTimeout as erro:
             print(f"[AVISO] '{esporte}' pulado por tempo esgotado: {erro}", file=sys.stderr)
