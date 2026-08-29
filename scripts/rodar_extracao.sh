@@ -3,8 +3,8 @@ set -uo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIRETORIO_LOGS="$RAIZ/.logs"
-ARQUIVO_TRAVA="/tmp/extrator-sp-sports.lock"
-LIMITE_DE_EXECUCAO="12m"
+ARQUIVO_TRAVA="/tmp/extrator-quadras.lock"
+LIMITE_DE_EXECUCAO="14m"
 DIAS_DE_LOG=14
 
 export HOME="${HOME:-/home/tavares}"
@@ -37,7 +37,7 @@ echo "===== fim $(date +%Y-%m-%dT%H:%M:%S)  código=$codigo  duração=${duracao
 echo "$(date +%Y-%m-%dT%H:%M:%S),$codigo,$duracao" >>"$LEDGER"
 
 if [ "$codigo" -ne 0 ]; then
-    logger -t extrator-sp-sports -p user.err \
+    logger -t extrator-quadras -p user.err \
         "extração falhou com código $codigo; veja $DIRETORIO_LOGS/extracao-$(date +%F).log"
 fi
 

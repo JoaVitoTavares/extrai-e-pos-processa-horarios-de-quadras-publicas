@@ -1,5 +1,7 @@
 """Testes do gerenciador: ordem das etapas, tolerância a falha e código de saída."""
 
+import threading
+
 import pytest
 import requests
 from playwright.sync_api import TimeoutError as PWTimeout
@@ -40,11 +42,14 @@ def quadra(nome="Areia 1 - Interna", horarios=None, aviso=None, data="2026-08-07
 
 @pytest.fixture(autouse=True)
 def arena_unica(monkeypatch, tmp_path):
-    """Deixa o config com uma arena só, gravando em tmp_path. É autouse porque main()
-    percorre a lista de arenas de verdade: sem isso um teste distraído abriria navegador
-    e escreveria no diretório de extrações da máquina."""
+    """Deixa o config com uma arena só, gravando em tmp_path, e desliga o paralelismo. É
+    autouse porque main() percorre a lista de arenas de verdade: sem isso um teste
+    distraído abriria navegador e escreveria no diretório de extrações da máquina. Com uma
+    arena por vez a ordem em que as etapas acontecem volta a ser observável; quem testa o
+    paralelismo religa ARENAS_EM_PARALELO."""
     monkeypatch.setattr(main, "ARENAS", [ARENA])
     monkeypatch.setattr(main, "DIRETORIO_EXTRACOES", str(tmp_path))
+    monkeypatch.setattr(main, "ARENAS_EM_PARALELO", 1)
 
 
 @pytest.fixture(autouse=True)
@@ -82,7 +87,7 @@ def etapas(monkeypatch, tratamento_dublado):
     ordem = tratamento_dublado
     monkeypatch.setattr(
         main, "coletar_quadras",
-        lambda arena, modo_visivel=False: ordem.append("quadras") or [quadra()],
+        lambda arena, modo_visivel=False, saida=None: ordem.append("quadras") or [quadra()],
     )
     monkeypatch.setattr(
         main, "resolver_local",
@@ -144,7 +149,9 @@ def test_cada_arena_grava_no_seu_diretorio(monkeypatch, etapas):
 
 def test_arena_carimba_nome_e_cidade_na_gravacao(monkeypatch):
     recebido = {}
-    monkeypatch.setattr(main, "coletar_quadras", lambda arena, modo_visivel=False: [quadra()])
+    monkeypatch.setattr(
+        main, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: [quadra()]
+    )
     monkeypatch.setattr(
         main, "salvar_extracao",
         lambda r, diretorio, arena="", cidade="": recebido.update(arena=arena, cidade=cidade)
@@ -159,7 +166,9 @@ def test_arena_carimba_nome_e_cidade_na_gravacao(monkeypatch):
 def test_grava_o_que_o_coletor_devolveu(monkeypatch):
     coletado = [quadra(horarios=[{"hora": "17:00", "status": "Livre"}])]
     gravado = []
-    monkeypatch.setattr(main, "coletar_quadras", lambda arena, modo_visivel=False: coletado)
+    monkeypatch.setattr(
+        main, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: coletado
+    )
     monkeypatch.setattr(
         main, "salvar_extracao",
         lambda r, diretorio, arena="", cidade="": gravado.append(r) or ["um.csv"],
@@ -172,7 +181,9 @@ def test_grava_o_que_o_coletor_devolveu(monkeypatch):
 
 def test_clima_e_consultado_nas_coordenadas_da_arena(monkeypatch):
     consultado = {}
-    monkeypatch.setattr(main, "coletar_quadras", lambda arena, modo_visivel=False: [quadra()])
+    monkeypatch.setattr(
+        main, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: [quadra()]
+    )
     monkeypatch.setattr(main, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
     monkeypatch.setattr(
         main, "coletar_clima",
@@ -191,7 +202,9 @@ def test_arena_sem_local_nao_consulta_clima(monkeypatch):
     Open-Meteo num ponto qualquer carimbaria na reserva o clima de outro lugar, que é
     pior do que a lacuna."""
     chamou = []
-    monkeypatch.setattr(main, "coletar_quadras", lambda arena, modo_visivel=False: [quadra()])
+    monkeypatch.setattr(
+        main, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: [quadra()]
+    )
     monkeypatch.setattr(main, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
     monkeypatch.setattr(main, "resolver_local", lambda endereco, diretorio, coordenadas: None)
     monkeypatch.setattr(main, "coletar_clima", lambda *a: chamou.append("clima") or "clima.csv")
@@ -202,7 +215,9 @@ def test_arena_sem_local_nao_consulta_clima(monkeypatch):
 
 
 def test_falha_do_geocodificador_nao_derruba_a_execucao(monkeypatch, capsys):
-    monkeypatch.setattr(main, "coletar_quadras", lambda arena, modo_visivel=False: [quadra()])
+    monkeypatch.setattr(
+        main, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: [quadra()]
+    )
     monkeypatch.setattr(main, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
     monkeypatch.setattr(main, "resolver_local", _que_falha(requests.ConnectionError("sem rede")))
 
@@ -212,7 +227,9 @@ def test_falha_do_geocodificador_nao_derruba_a_execucao(monkeypatch, capsys):
 
 
 def test_falha_no_clima_nao_derruba_a_execucao(monkeypatch, capsys):
-    monkeypatch.setattr(main, "coletar_quadras", lambda arena, modo_visivel=False: [quadra()])
+    monkeypatch.setattr(
+        main, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: [quadra()]
+    )
     monkeypatch.setattr(main, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
     monkeypatch.setattr(main, "coletar_clima", _que_falha(requests.ConnectionError("sem rede")))
 
@@ -235,7 +252,7 @@ def test_arena_que_falha_nao_derruba_as_outras(monkeypatch, capsys):
     monkeypatch.setattr(main, "ARENAS", [ARENA, OUTRA_ARENA])
     monkeypatch.setattr(main, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
 
-    def coletar(arena, modo_visivel=False):
+    def coletar(arena, modo_visivel=False, saida=None):
         if arena["nome"] == "SP Sports":
             raise PWTimeout("tempo esgotado")
         return [quadra()]
@@ -246,8 +263,57 @@ def test_arena_que_falha_nao_derruba_as_outras(monkeypatch, capsys):
     assert "SP Sports" in capsys.readouterr().err
 
 
+def test_arenas_rodam_ao_mesmo_tempo(monkeypatch):
+    """As arenas são independentes — navegador, diretório e clima próprios —, e é isso que
+    faz a lista inteira caber no intervalo do agendamento: em sequência, cada site esperaria
+    o anterior. A barreira só libera quando as duas chegam nela, então ela só passa se as
+    duas estiverem mesmo no ar ao mesmo tempo."""
+    monkeypatch.setattr(main, "ARENAS", [ARENA, OUTRA_ARENA])
+    monkeypatch.setattr(main, "ARENAS_EM_PARALELO", 2)
+    monkeypatch.setattr(main, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
+    barreira = threading.Barrier(2, timeout=5)
+
+    def coletar(arena, modo_visivel=False, saida=None):
+        barreira.wait()
+        return [quadra()]
+
+    monkeypatch.setattr(main, "coletar_quadras", coletar)
+
+    main.main()
+
+
+def test_saida_de_cada_arena_sai_num_bloco_so(monkeypatch, capsys):
+    """Com as arenas em paralelo, imprimir na hora entrelaçaria as linhas de umas com as
+    das outras e o log perderia a serventia. Cada arena guarda o que imprimiria e o log
+    recebe o bloco inteiro quando ela termina."""
+    monkeypatch.setattr(main, "ARENAS", [ARENA, OUTRA_ARENA])
+    monkeypatch.setattr(main, "ARENAS_EM_PARALELO", 2)
+    monkeypatch.setattr(main, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
+    monkeypatch.setattr(
+        main, "coletar_quadras",
+        lambda arena, modo_visivel=False, saida=None:
+            print(f"marca de {arena['nome']}", file=saida) or [quadra()],
+    )
+
+    main.main()
+    linhas = [linha for linha in capsys.readouterr().out.splitlines() if linha.strip()]
+    cabecalhos = [i for i, linha in enumerate(linhas) if linha.startswith("  ARENA:")]
+    marcas = [i for i, linha in enumerate(linhas) if linha.startswith("marca de")]
+    seguintes = cabecalhos[1:] + [len(linhas)]
+
+    assert len(cabecalhos) == len(marcas) == 2
+    assert all(
+        cabecalho < marca < seguinte
+        for cabecalho, marca, seguinte in zip(cabecalhos, marcas, seguintes)
+    )
+    assert all(
+        linhas[cabecalho].split("ARENA: ")[1].startswith(linhas[marca].removeprefix("marca de "))
+        for cabecalho, marca in zip(cabecalhos, marcas)
+    )
+
+
 def test_sai_com_erro_quando_nao_grava_nada(monkeypatch):
-    monkeypatch.setattr(main, "coletar_quadras", lambda arena, modo_visivel=False: [])
+    monkeypatch.setattr(main, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: [])
     monkeypatch.setattr(main, "salvar_extracao", lambda r, diretorio, **kwargs: [])
 
     with pytest.raises(SystemExit) as saida:
