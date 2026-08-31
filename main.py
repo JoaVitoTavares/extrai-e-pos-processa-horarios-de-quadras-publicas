@@ -8,10 +8,12 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from playwright.sync_api import TimeoutError as PWTimeout
 
-from config import ARENAS, ARENAS_EM_PARALELO, DIRETORIO_EXTRACOES, TIPOS_QUADRA
+from config import (
+    ARENAS, ARENAS_EM_PARALELO, DIRETORIO_EXTRACOES, DIRETORIO_LOGS, TIPOS_QUADRA
+)
 from courts_collector import coletar_horarios, esportes_alvo, listar_esportes, tipos_ausentes
 from localizacao import endereco_observado, resolver_local
-from persistencia import salvar_extracao, slug
+from persistencia import registrar_verificacao, salvar_extracao, slug
 from tratamento import TratamentoDeDados
 from weather_collector import coletar_clima, coletar_previsao
 
@@ -154,12 +156,23 @@ def _imprimir_resumo(
     print(f">> Clima aplicado em {len(enriquecidos)} arquivo(s) de quadra.", file=saida)
 
 
-def rodar_arena(arena: dict, modo_visivel: bool = False, saida=None) -> list[str]:
+def quadras_verificadas(resultados: list[dict]) -> list[str]:
+    """Lista, em ordem e sem repetir, o nome das quadras que a coleta chegou a ler na
+    arena. A quadra vem repetida nos resultados — uma vez por período e por dia —, e o
+    período que voltou com aviso fica de fora: ali o site não respondeu, então dizer no
+    log que a quadra foi verificada seria dizer o que não aconteceu."""
+    return sorted({d["quadra"] for d in resultados if d["quadra"] and not d["aviso"]})
+
+
+def rodar_arena(
+    arena: dict, modo_visivel: bool = False, saida=None
+) -> tuple[list[str], list[str]]:
     """Executa uma arena de ponta a ponta: coleta as quadras de hoje e dos próximos dias,
     imprime o que achou, resolve onde ela fica, grava um CSV por quadra — é na gravação
     que a reserva feita entre duas rodadas é detectada —, registra clima e previsão
     daquelas coordenadas e aplica os dois nas reservas. Tudo dentro do diretório da
-    arena, para nada do que se grava aqui disputar arquivo com outra."""
+    arena, para nada do que se grava aqui disputar arquivo com outra. Devolve os arquivos
+    gravados e as quadras que foram verificadas."""
     saida = saida or sys.stdout
     resultados = coletar_quadras(arena, modo_visivel, saida)
     for dados in resultados:
@@ -178,43 +191,50 @@ def rodar_arena(arena: dict, modo_visivel: bool = False, saida=None) -> list[str
 
     enriquecidos = TratamentoDeDados(arena["diretorio"]).aplicar()
     _imprimir_resumo(arena, caminhos, enriquecidos, saida)
-    return caminhos
+    return caminhos, quadras_verificadas(resultados)
 
 
-def _rodada_da_arena(arena: dict, modo_visivel: bool = False) -> tuple[list[str], str]:
-    """Roda uma arena guardando num texto só tudo o que ela imprimiria, para o log receber
-    o bloco inteiro de uma vez quando ela terminar: com várias arenas ao mesmo tempo,
-    imprimir na hora entrelaçaria as linhas de umas com as das outras. A arena que falha
-    inteira é reportada e volta sem arquivo nenhum, sem levar as outras junto."""
+def _rodada_da_arena(
+    arena: dict, modo_visivel: bool = False
+) -> tuple[list[str], list[str], str]:
+    """Roda uma arena guardando num texto só tudo o que ela imprimiria, para a saída
+    receber o bloco inteiro de uma vez quando ela terminar: com várias arenas ao mesmo
+    tempo, imprimir na hora entrelaçaria as linhas de umas com as das outras. A arena que
+    falha inteira é reportada e volta sem arquivo e sem quadra nenhuma, sem levar as
+    outras junto."""
     saida = io.StringIO()
     print("\n" + "#" * 46, file=saida)
     print(f"  ARENA: {arena['nome']}  ({arena['url']})", file=saida)
     print("#" * 46, file=saida)
     try:
-        caminhos = rodar_arena(arena, modo_visivel, saida)
+        caminhos, quadras = rodar_arena(arena, modo_visivel, saida)
     except (PWTimeout, requests.RequestException, ValueError) as erro:
         print(f"[AVISO] arena '{arena['nome']}' pulada: {erro}", file=sys.stderr)
-        caminhos = []
-    return caminhos, saida.getvalue()
+        caminhos, quadras = [], []
+    return caminhos, quadras, saida.getvalue()
 
 
 def main() -> None:
     """Executa a rodada nas arenas do config, ARENAS_EM_PARALELO ao mesmo tempo: cada uma
     tem navegador, diretório e clima próprios, então nenhuma espera nem atrapalha a outra
-    e a lista inteira cabe no intervalo do agendamento. Cada arena aparece no log quando
-    termina, com o bloco inteiro de uma vez. Uma execução que não colete quadra nenhuma em
-    arena nenhuma sai com erro em vez de gravar silêncio — o modo de falha mais caro num
-    coletor agendado."""
+    e a lista inteira cabe no intervalo do agendamento. Cada arena que termina imprime o
+    bloco inteiro de uma vez e deixa no CSV de verificações a hora em que foi vista e as
+    quadras que tinha — registrada aqui, e não dentro dela, porque este laço é o único
+    ponto onde as rodadas voltam a ser uma de cada vez e o CSV é reescrito inteiro. Uma
+    execução que não colete quadra nenhuma sai com erro em vez de gravar silêncio."""
     modo_visivel = "--ver" in sys.argv
     arenas = [preparar_arena(configurada) for configurada in ARENAS]
 
     gravados = []
     coletadas = 0
     with ThreadPoolExecutor(max_workers=max(1, min(ARENAS_EM_PARALELO, len(arenas)))) as executor:
-        rodadas = [executor.submit(_rodada_da_arena, arena, modo_visivel) for arena in arenas]
+        rodadas = {
+            executor.submit(_rodada_da_arena, arena, modo_visivel): arena for arena in arenas
+        }
         for rodada in as_completed(rodadas):
-            caminhos, texto = rodada.result()
+            caminhos, quadras, texto = rodada.result()
             print(texto, end="")
+            registrar_verificacao(rodadas[rodada]["nome"], quadras, DIRETORIO_LOGS)
             coletadas += bool(caminhos)
             gravados.extend(caminhos)
 

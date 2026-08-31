@@ -42,8 +42,9 @@ no Pará, no mesmo instante. É essa dispersão que faz o clima valer como vari�
 tabela de tempo só, de um ponto só, descreveria o lugar errado em vinte das vinte e uma
 pastas.
 
-> **Oito arenas estão na lista e não entregam quadra**, cada uma por um motivo que o log
-> nomeia. **Arena Grings** e **CT Kliks** não vendem pela web: o site responde "Local
+> **Oito arenas estão na lista e não entregam quadra** — são as que aparecem com
+> `quadras_verificadas = 0` no log de verificações —, cada uma por um motivo que a rodada
+> nomeia na saída quando chamada à mão. **Arena Grings** e **CT Kliks** não vendem pela web: o site responde "Local
 > indisponível para marcações pela web" no lugar do campo de data, e a rodada encerra
 > aquela arena em cinco segundos, com o aviso e sem linha no CSV. **Na 5 Beach Sport**
 > pede login — a página anuncia "Faça seu login" e a agenda não abre para quem não entrou.
@@ -127,7 +128,7 @@ anterior.
 | `localizacao.py` | Traduz o endereço da arena em coordenadas, e lembra o resultado |
 | `weather_collector.py` | Coleta as condições atuais e a previsão hora a hora, pela API Open-Meteo |
 | `tratamento.py` | Casa clima e previsão com as reservas: a janela do jogo e o instante da reserva |
-| `persistencia.py` | Gravação do CSV por quadra, com upsert. Não depende do Playwright |
+| `persistencia.py` | Gravação do CSV por quadra e do log de verificações, com upsert. Não depende do Playwright |
 
 A separação não é enfeite: `persistencia.py` é importado por quem não abre navegador
 nenhum, e o coletor carrega o Playwright já no `import`. Juntos, um consultaria o
@@ -212,9 +213,11 @@ construção — navegador, diretório, endereço e clima próprios —, então 
 precisou de trava nenhuma na gravação: cada uma escreve só na pasta dela. A exceção é a
 **geocodificação**, que roda com trava e uma arena de cada vez, porque o Nominatim é um
 serviço público que pede no máximo uma consulta por segundo e a primeira rodada de uma
-lista nova resolveria as 29 de uma vez. O log continua legível porque cada arena guarda o
-que imprimiria e só solta o bloco inteiro quando termina; sem isso, quatro arenas
-escrevendo ao mesmo tempo entrelaçariam as linhas.
+lista nova resolveria as 29 de uma vez. O log de verificações é a outra: ele é um arquivo
+só, lido e reescrito inteiro a cada linha, então quem grava nele é o laço que recolhe as
+arenas prontas — ali elas voltam a ser uma de cada vez. A saída continua legível porque
+cada arena guarda o que imprimiria e só solta o bloco inteiro quando termina; sem isso,
+quatro arenas escrevendo ao mesmo tempo entrelaçariam as linhas.
 
 > Vale **4**. O teto não é o processador — a coleta passa o tempo esperando o site —, é a
 > **memória**: cada arena no ar segura um Chromium, uns 400 MB, e estourar a RAM derruba a
@@ -588,7 +591,7 @@ diretório criaria um `.extracoes/` paralelo no `$HOME` e partiria o dataset em 
 avisar. A segunda é o `flock`: a gravação lê o CSV inteiro e reescreve, de modo que duas
 rodadas sobrepostas se sobrescrevem por completo — a que terminar por último apaga os
 slots que a outra acabou de inserir. Rodada que encontra a trava tomada **sai com 0** e
-anota "pulado" no log; ela não entra na fila, porque a rodada em andamento já está
+anota "pulado" no `journald`; ela não entra na fila, porque a rodada em andamento já está
 colhendo dado mais fresco do que a duplicata colheria.
 
 Um `timeout` fecha o terceiro buraco: sem ele, um Chromium travado seguraria a trava para
@@ -650,24 +653,38 @@ flagram a reserva feita de madrugada, nos horários que ainda estão no futuro.
 ### Quando alguma coisa falha
 
 Não há e-mail: a máquina não tem MTA, e o `MAILTO=""` declara isso em vez de deixar o
-`cron` falando sozinho. O rastro fica em três lugares:
+`cron` falando sozinho. A rodada agendada **não guarda relatório de texto** — o que ela
+imprime vai para o `stdout`, que o `cron` descarta; o rastro fica em três lugares:
 
 ```bash
+column -s, -t .logs/verificacoes.csv                # arena por arena: quando e quais quadras
 tail .logs/execucoes.csv                            # instante, código e duração por rodada
 awk -F, 'NR > 1 && $2 != 0' .logs/execucoes.csv     # só as que falharam
-journalctl -t extrator-quadras -p err --since today
-less .logs/extracao-$(date +%F).log                 # o relatório completo da rodada
+journalctl -t extrator-quadras --since today        # falhas e rodadas puladas
 ```
 
-O `execucoes.csv` é o que se olha primeiro — uma linha por rodada que chegou a rodar. A
-rodada pulada não deixa linha ali, de propósito: ela sai antes, e o ledger é o registro do
-que foi coletado, não do que o `cron` tentou. Quem conta as puladas é o log do dia, com
-`grep -c "pulado: a execução anterior"` — subindo, é sinal de que a cadência ficou
-apertada para a duração real. O padrão importa: `grep pulado` sozinho também casaria com
-o esporte pulado por tempo esgotado, que é degradação normal, não disputa de trava.
-Os logs são podados depois de 14 dias; ficam cerca de 20 KB por rodada, uns 25 MB em
-regime — o relatório cresceu junto com os dias coletados. `.logs/` fica fora do Git, como
-`.extracoes/`.
+O `verificacoes.csv` é o log da coleta: **uma linha por arena**, com o instante em que ela
+foi verificada pela última vez, quantas quadras foram lidas ali e quais. É um retrato do
+agora, não um histórico — a rodada seguinte reescreve a linha da arena no lugar, e por
+isso o arquivo fica em 29 linhas em vez de crescer 29 por rodada, quase três mil por dia.
+O histórico de quem já esteve lá é o próprio `.extracoes/`. Duas leituras: um
+`ultima_verificacao` velho enquanto as vizinhas estão frescas é arena que caiu ou que a
+rodada não alcançou dentro do tempo; `quadras_verificadas = 0` é arena que respondeu sem
+entregar quadra — o site pede login, não vende pela web, ou o catálogo do `config` deixou
+de casar com os esportes que ela publica.
+
+O `execucoes.csv` diz se a rodada como um todo terminou — uma linha por rodada que chegou
+a rodar. A rodada pulada não deixa linha ali, de propósito: ela sai antes, e o ledger é o
+registro do que foi coletado, não do que o `cron` tentou. Quem registra as puladas é o
+`journald`, com `journalctl -t extrator-quadras -p warning`; subindo, é sinal de que a
+cadência ficou apertada para a duração real. `.logs/` fica fora do Git, como `.extracoes/`.
+
+Para ver o relatório completo de uma rodada — os horários um a um, os avisos de cada
+arena —, a saída existe: basta chamar à mão, que aí ela vai para o terminal.
+
+```bash
+.venv/bin/python main.py
+```
 
 > O `cron` não recupera execução perdida, e `anacron` não cobre intervalo menor que um
 > dia. Máquina suspensa, desligada ou sem rede vira buraco na série temporal — num

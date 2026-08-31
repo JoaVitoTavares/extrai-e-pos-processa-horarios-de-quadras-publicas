@@ -428,3 +428,35 @@ def test_extracao_so_com_aviso_nao_cria_arquivo(tmp_path):
 
     assert persistencia.salvar_extracao([sem_dados], str(tmp_path), AGORA) == []
     assert list(tmp_path.iterdir()) == []
+
+
+def test_verificacao_da_arena_e_atualizada_no_lugar(tmp_path):
+    """O log de verificações é um retrato do agora, e não um histórico: a rodada seguinte
+    reescreve a linha da arena com a hora nova e as quadras que viu. São 96 rodadas por
+    dia; acumulando linha por passagem, o arquivo cresceria mais rápido do que se lê."""
+    persistencia.registrar_verificacao("SP Sports", ["Areia 1"], str(tmp_path), AGORA)
+    caminho = persistencia.registrar_verificacao(
+        "SP Sports", ["Areia 1", "Areia 2"], str(tmp_path), datetime(2026, 8, 7, 8, 15)
+    )
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert len(df) == 1
+    assert df.loc[0, "ultima_verificacao"] == "2026-08-07T08:15:00"
+    assert df.loc[0, "quadras_verificadas"] == "2"
+    assert df.loc[0, "quadras"] == "Areia 1; Areia 2"
+
+
+def test_cada_arena_tem_a_sua_linha_no_log(tmp_path):
+    persistencia.registrar_verificacao("SP Sports", ["Areia 1"], str(tmp_path), AGORA)
+    caminho = persistencia.registrar_verificacao("Arena Parobé", ["Grama 5"], str(tmp_path), AGORA)
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert list(df["arena"]) == ["SP Sports", "Arena Parobé"]
+    assert list(df["quadras"]) == ["Areia 1", "Grama 5"]
+
+
+def test_log_cria_o_diretorio_se_nao_existir(tmp_path):
+    destino = tmp_path / "ainda-nao-existe"
+    caminho = persistencia.registrar_verificacao("SP Sports", ["Areia 1"], str(destino), AGORA)
+
+    assert os.path.exists(caminho)

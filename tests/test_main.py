@@ -1,7 +1,9 @@
 """Testes do gerenciador: ordem das etapas, tolerância a falha e código de saída."""
 
 import threading
+from datetime import date
 
+import pandas as pd
 import pytest
 import requests
 from playwright.sync_api import TimeoutError as PWTimeout
@@ -49,6 +51,7 @@ def arena_unica(monkeypatch, tmp_path):
     paralelismo religa ARENAS_EM_PARALELO."""
     monkeypatch.setattr(main, "ARENAS", [ARENA])
     monkeypatch.setattr(main, "DIRETORIO_EXTRACOES", str(tmp_path))
+    monkeypatch.setattr(main, "DIRETORIO_LOGS", str(tmp_path))
     monkeypatch.setattr(main, "ARENAS_EM_PARALELO", 1)
 
 
@@ -310,6 +313,54 @@ def test_saida_de_cada_arena_sai_num_bloco_so(monkeypatch, capsys):
         linhas[cabecalho].split("ARENA: ")[1].startswith(linhas[marca].removeprefix("marca de "))
         for cabecalho, marca in zip(cabecalhos, marcas)
     )
+
+
+def test_log_de_verificacoes_tem_uma_linha_por_arena(monkeypatch, tmp_path):
+    """O log da rodada agendada é este CSV, e não mais o relatório de texto: para cada
+    empresa, quando ela foi verificada pela última vez e que quadras havia lá. A quadra
+    aparece uma vez, mesmo tendo sido lida em vários dias e períodos."""
+    monkeypatch.setattr(main, "ARENAS", [ARENA, OUTRA_ARENA])
+    monkeypatch.setattr(main, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
+    monkeypatch.setattr(
+        main, "coletar_quadras",
+        lambda arena, modo_visivel=False, saida=None: [
+            quadra("Areia 2 - Externa"),
+            quadra("Areia 1 - Interna"),
+            quadra("Areia 1 - Interna", data="2026-08-08"),
+        ],
+    )
+
+    main.main()
+    df = pd.read_csv(tmp_path / "verificacoes.csv", dtype=str, keep_default_na=False)
+
+    assert list(df["arena"]) == ["SP Sports", "Arena Parobé"]
+    assert list(df["quadras_verificadas"]) == ["2", "2"]
+    assert df.loc[0, "quadras"] == "Areia 1 - Interna; Areia 2 - Externa"
+    assert df.loc[0, "ultima_verificacao"].startswith(date.today().isoformat())
+
+
+def test_arena_que_falhou_aparece_no_log_sem_quadra_nenhuma(monkeypatch, tmp_path):
+    """A arena que caiu precisa aparecer no log, e não sumir dele: é a diferença entre
+    'foi verificada e não tinha nada' e 'não chegou a ser verificada' — e é o que mostra
+    que uma empresa parou de responder enquanto as outras seguiram normais."""
+    monkeypatch.setattr(main, "coletar_quadras", _que_falha(PWTimeout("tempo esgotado")))
+
+    with pytest.raises(SystemExit):
+        main.main()
+    df = pd.read_csv(tmp_path / "verificacoes.csv", dtype=str, keep_default_na=False)
+
+    assert list(df["arena"]) == ["SP Sports"]
+    assert df.loc[0, "quadras_verificadas"] == "0"
+    assert df.loc[0, "quadras"] == ""
+
+
+def test_periodo_com_aviso_nao_entra_nas_quadras_verificadas():
+    resultados = [
+        quadra("Areia 1 - Interna"),
+        quadra("Areia 2 - Externa", aviso="Não foi possível coletar os horários."),
+    ]
+
+    assert main.quadras_verificadas(resultados) == ["Areia 1 - Interna"]
 
 
 def test_sai_com_erro_quando_nao_grava_nada(monkeypatch):

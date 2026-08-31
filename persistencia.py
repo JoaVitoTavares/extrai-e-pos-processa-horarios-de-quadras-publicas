@@ -6,9 +6,10 @@ import unicodedata
 import pandas as pd
 from datetime import date, datetime, timedelta
 
-from config import DIRETORIO_EXTRACOES
+from config import ARQUIVO_DE_VERIFICACOES, DIRETORIO_EXTRACOES, DIRETORIO_LOGS
 
 SUFIXO_CSV = "-extracoes.csv"
+COLUNAS_DO_LOG = ["arena", "ultima_verificacao", "quadras_verificadas", "quadras"]
 COLUNAS_DE_CLIMA = ["clima", "temperatura", "umidade", "precipitacao", "velocidade_vento"]
 COLUNAS_DO_CLIMA_NA_RESERVA = [f"reserva_{coluna}" for coluna in COLUNAS_DE_CLIMA]
 COLUNAS_DA_PREVISAO = [f"previsao_{coluna}" for coluna in COLUNAS_DE_CLIMA]
@@ -175,6 +176,29 @@ def _gravar_csv(caminho_csv: str, linhas: list[dict], agora: datetime) -> None:
                 df.loc[existente, COLUNAS_DA_VIRADA] = reserva
 
     df.to_csv(caminho_csv, index=False)
+
+
+def registrar_verificacao(
+    arena: str, quadras: list[str], diretorio: str = DIRETORIO_LOGS, agora=None
+) -> str:
+    """Anota no CSV de log que a arena foi verificada agora e quais quadras a rodada
+    enxergou nela. É uma linha por arena, atualizada no lugar a cada rodada: o que
+    interessa é o estado de hoje — quando cada empresa foi vista pela última vez e o que
+    havia lá —, não o rastro de todas as passagens, que já sai caro em disco com uma
+    rodada a cada quinze minutos. Devolve o caminho do arquivo."""
+    agora = agora or datetime.now()
+    caminho_csv = os.path.join(diretorio, ARQUIVO_DE_VERIFICACOES)
+    if diretorio:
+        os.makedirs(diretorio, exist_ok=True)
+
+    linha = {
+        "arena": arena,
+        "ultima_verificacao": agora.isoformat(timespec="seconds"),
+        "quadras_verificadas": len(quadras),
+        "quadras": "; ".join(quadras),
+    }
+    anexar_linha(caminho_csv, linha, COLUNAS_DO_LOG, "arena")
+    return caminho_csv
 
 
 def salvar_extracao(
