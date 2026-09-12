@@ -12,39 +12,9 @@ from extrator.courts_collector import (
 from extrator.localizacao import endereco_observado, resolver_local
 from extrator.persistencia import salvar_extracao
 from extrator.tratamento import TratamentoDeDados
-from extrator.weather_collector import coletar_clima, coletar_previsao
+from extrator.weather_collector import record_forecast, record_weather
 
 GEOCODING_LOCK = threading.Lock()
-
-
-def record_weather(
-    location: dict, directory: str, output=None, arena_name: str = ""
-) -> str | None:
-    """Grava as condições atuais do ponto da arena. Falha de rede vira aviso e None."""
-    output = output or sys.stdout
-    print("\n>> CLIMA (API Open-Meteo): condições atuais na arena...", file=output)
-    try:
-        path = coletar_clima(location["latitude"], location["longitude"], directory)
-    except (requests.RequestException, ValueError) as error:
-        print(f"[AVISO] {arena_name}: clima não coletado: {error}", file=sys.stderr)
-        return None
-    print(f"   registrado em {path}", file=output)
-    return path
-
-
-def record_forecast(
-    location: dict, directory: str, output=None, arena_name: str = ""
-) -> str | None:
-    """Grava a previsão hora a hora do ponto da arena. Falha de rede vira aviso e None."""
-    output = output or sys.stdout
-    print("\n>> PREVISÃO (API Open-Meteo): horas à frente na arena...", file=output)
-    try:
-        path = coletar_previsao(location["latitude"], location["longitude"], directory)
-    except (requests.RequestException, ValueError) as error:
-        print(f"[AVISO] {arena_name}: previsão não coletada: {error}", file=sys.stderr)
-        return None
-    print(f"   registrada em {path}", file=output)
-    return path
 
 
 class ArenaExtractor:

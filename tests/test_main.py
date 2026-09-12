@@ -9,7 +9,7 @@ import requests
 from playwright.sync_api import TimeoutError as PWTimeout
 
 import main
-from extrator import arena_extractor
+from extrator import arena_extractor, weather_collector
 from extrator.config import ARENAS, DIRETORIO_EXTRACOES, DIRETORIO_LOGS, ARENAS_EM_PARALELO
 from extrator.localizacao import resolver_local
 from extrator.persistencia import salvar_extracao
@@ -73,8 +73,8 @@ def tratamento_dublado(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def clima_dublado(monkeypatch):
-    monkeypatch.setattr(arena_extractor, "coletar_clima", lambda lat, lon, diretorio: "clima.csv")
-    monkeypatch.setattr(arena_extractor, "coletar_previsao", lambda lat, lon, diretorio: "previsao.csv")
+    monkeypatch.setattr(weather_collector, "coletar_clima", lambda lat, lon, diretorio: "clima.csv")
+    monkeypatch.setattr(weather_collector, "coletar_previsao", lambda lat, lon, diretorio: "previsao.csv")
     monkeypatch.setattr(arena_extractor, "resolver_local", lambda endereco, diretorio, coordenadas: LOCAL)
 
 
@@ -94,10 +94,10 @@ def etapas(monkeypatch, tratamento_dublado):
         lambda r, diretorio, arena="", cidade="": ordem.append("grava") or ["um.csv"],
     )
     monkeypatch.setattr(
-        arena_extractor, "coletar_clima", lambda lat, lon, diretorio: ordem.append("clima") or "clima.csv"
+        weather_collector, "coletar_clima", lambda lat, lon, diretorio: ordem.append("clima") or "clima.csv"
     )
     monkeypatch.setattr(
-        arena_extractor, "coletar_previsao",
+        weather_collector, "coletar_previsao",
         lambda lat, lon, diretorio: ordem.append("previsao") or "previsao.csv",
     )
     return ordem
@@ -176,7 +176,7 @@ def test_clima_e_consultado_nas_coordenadas_da_arena(monkeypatch):
     )
     monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
     monkeypatch.setattr(
-        arena_extractor, "coletar_clima",
+        weather_collector, "coletar_clima",
         lambda lat, lon, diretorio: consultado.update(lat=lat, lon=lon, diretorio=diretorio)
         or "clima.csv",
     )
@@ -194,7 +194,7 @@ def test_arena_sem_local_nao_consulta_clima(monkeypatch):
     )
     monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
     monkeypatch.setattr(arena_extractor, "resolver_local", lambda endereco, diretorio, coordenadas: None)
-    monkeypatch.setattr(arena_extractor, "coletar_clima", lambda *a: chamou.append("clima") or "clima.csv")
+    monkeypatch.setattr(weather_collector, "coletar_clima", lambda *a: chamou.append("clima") or "clima.csv")
 
     main.main()
 
@@ -218,7 +218,7 @@ def test_falha_no_clima_nao_derruba_a_execucao(monkeypatch, capsys):
         arena_extractor.ArenaExtractor, "_collect_courts", lambda self: [quadra()]
     )
     monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
-    monkeypatch.setattr(arena_extractor, "coletar_clima", _que_falha(requests.ConnectionError("sem rede")))
+    monkeypatch.setattr(weather_collector, "coletar_clima", _que_falha(requests.ConnectionError("sem rede")))
 
     main.main()
 
@@ -226,9 +226,9 @@ def test_falha_no_clima_nao_derruba_a_execucao(monkeypatch, capsys):
 
 
 def test_json_de_clima_invalido_tambem_e_tolerado(monkeypatch, capsys):
-    monkeypatch.setattr(arena_extractor, "coletar_clima", _que_falha(ValueError("sem o bloco 'current'")))
+    monkeypatch.setattr(weather_collector, "coletar_clima", _que_falha(ValueError("sem o bloco 'current'")))
 
-    assert arena_extractor.record_weather(LOCAL, "qualquer") is None
+    assert weather_collector.record_weather(LOCAL, "qualquer") is None
     assert "clima não coletado" in capsys.readouterr().err
 
 
