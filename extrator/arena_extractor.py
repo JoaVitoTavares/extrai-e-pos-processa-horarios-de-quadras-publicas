@@ -17,60 +17,6 @@ from extrator.weather_collector import coletar_clima, coletar_previsao
 GEOCODING_LOCK = threading.Lock()
 
 
-def collect_courts(arena: dict, visible_browser: bool = False, output=None) -> list[dict]:
-    output = output or sys.stdout
-    print(">> TÉCNICA 1 (API JSON, sem navegador): listando esportes...\n", file=output)
-    sports = listar_esportes(arena["url"])
-    for position, sport in enumerate(sports, 1):
-        print(f"   {position}. {sport}", file=output)
-
-    target_sports = esportes_alvo(sports, arena["tipos"])
-    missing_types = tipos_ausentes(target_sports, arena["tipos"])
-    if missing_types:
-        print(f"\n[AVISO] tipos de quadra não encontrados no site: {', '.join(missing_types)}",
-              file=output)
-
-    results = []
-    for sport in target_sports:
-        print(f"\n>> TÉCNICA 2 (Playwright): horários de '{sport}' (todos os períodos)...",
-              file=output)
-        try:
-            results.extend(
-                coletar_horarios(
-                    sport,
-                    arena["url"],
-                    periodo=None,
-                    headless=not visible_browser,
-                    tipos=arena["tipos"],
-                )
-            )
-        except PWTimeout as error:
-            print(f"[AVISO] {arena['nome']}: '{sport}' pulado por tempo esgotado: {error}",
-                  file=sys.stderr)
-    return results
-
-
-def record_location(arena: dict, results: list[dict], output=None) -> dict | None:
-    output = output or sys.stdout
-    print(f"\n>> LOCAL (Nominatim): onde fica a {arena['nome']}...", file=output)
-    try:
-        with GEOCODING_LOCK:
-            location = resolver_local(
-                endereco_observado(results), arena["diretorio"], arena["coordenadas"]
-            )
-    except (requests.RequestException, ValueError) as error:
-        print(f"[AVISO] {arena['nome']}: endereço não geocodificado: {error}", file=sys.stderr)
-        return None
-
-    if location is None:
-        print(f"[AVISO] {arena['nome']}: sem endereço reconhecido, rodada sem clima.",
-              file=sys.stderr)
-        return None
-    print(f"   {location['endereco']} -> {location['latitude']}, {location['longitude']}",
-          file=output)
-    return location
-
-
 def record_weather(
     location: dict, directory: str, output=None, arena_name: str = ""
 ) -> str | None:
@@ -126,11 +72,11 @@ class ArenaExtractor:
         return sorted({result["quadra"] for result in results if result["quadra"] and not result["aviso"]})
 
     def _extract_pipeline(self) -> tuple[list[str], list[str]]:
-        results = collect_courts(self.arena, self.visible_browser, self.output)
+        results = self._collect_courts()
         for data in results:
             self._print_extraction(data)
 
-        location = record_location(self.arena, results, self.output)
+        location = self._record_location(results)
         paths = salvar_extracao(
             results,
             self.arena["diretorio"],
@@ -144,6 +90,59 @@ class ArenaExtractor:
         enriched_paths = TratamentoDeDados(self.arena["diretorio"]).aplicar()
         self._print_summary(paths, enriched_paths)
         return paths, self.verified_court_names(results)
+
+    def _collect_courts(self) -> list[dict]:
+        print(">> TÉCNICA 1 (API JSON, sem navegador): listando esportes...\n", file=self.output)
+        sports = listar_esportes(self.arena["url"])
+        for position, sport in enumerate(sports, 1):
+            print(f"   {position}. {sport}", file=self.output)
+
+        target_sports = esportes_alvo(sports, self.arena["tipos"])
+        missing_types = tipos_ausentes(target_sports, self.arena["tipos"])
+        if missing_types:
+            print(f"\n[AVISO] tipos de quadra não encontrados no site: {', '.join(missing_types)}",
+                  file=self.output)
+
+        results = []
+        for sport in target_sports:
+            print(f"\n>> TÉCNICA 2 (Playwright): horários de '{sport}' (todos os períodos)...",
+                  file=self.output)
+            try:
+                results.extend(
+                    coletar_horarios(
+                        sport,
+                        self.arena["url"],
+                        periodo=None,
+                        headless=not self.visible_browser,
+                        tipos=self.arena["tipos"],
+                    )
+                )
+            except PWTimeout as error:
+                print(f"[AVISO] {self.arena['nome']}: '{sport}' pulado por tempo esgotado: {error}",
+                      file=sys.stderr)
+        return results
+
+    def _record_location(self, results: list[dict]) -> dict | None:
+        print(f"\n>> LOCAL (Nominatim): onde fica a {self.arena['nome']}...", file=self.output)
+        try:
+            with GEOCODING_LOCK:
+                location = resolver_local(
+                    endereco_observado(results),
+                    self.arena["diretorio"],
+                    self.arena["coordenadas"],
+                )
+        except (requests.RequestException, ValueError) as error:
+            print(f"[AVISO] {self.arena['nome']}: endereço não geocodificado: {error}",
+                  file=sys.stderr)
+            return None
+
+        if location is None:
+            print(f"[AVISO] {self.arena['nome']}: sem endereço reconhecido, rodada sem clima.",
+                  file=sys.stderr)
+            return None
+        print(f"   {location['endereco']} -> {location['latitude']}, {location['longitude']}",
+              file=self.output)
+        return location
 
     def _print_arena_header(self) -> None:
         print("\n" + "#" * 46, file=self.output)
