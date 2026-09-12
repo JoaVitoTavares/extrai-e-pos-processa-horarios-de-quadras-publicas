@@ -16,39 +16,41 @@ from extrator.persistencia import registrar_verificacao, slug
 def normalize_arena_info(arena: dict) -> dict:
     """Completa uma entrada de ARENAS: deriva o identificador da URL, preenche nome e
     tipos ausentes com os padrões e monta o diretório de saída da arena."""
-    identificador = slug(arena["url"].rstrip("/").rsplit("/", 1)[-1])
+    arena_slug = slug(arena["url"].rstrip("/").rsplit("/", 1)[-1])
     return {
-        "nome": arena.get("nome") or identificador,
+        "nome": arena.get("nome") or arena_slug,
         "url": arena["url"],
-        "diretorio": os.path.join(DIRETORIO_EXTRACOES, identificador),
+        "diretorio": os.path.join(DIRETORIO_EXTRACOES, arena_slug),
         "coordenadas": arena.get("coordenadas"),
         "tipos": arena.get("tipos") or TIPOS_QUADRA,
     }
 
 
 def main() -> None:
-    modo_visivel = "--ver" in sys.argv
-    arenas = [normalize_arena_info(configurada) for configurada in ARENAS]
+    visible_browser = "--ver" in sys.argv
+    arenas = [normalize_arena_info(configured_arena) for configured_arena in ARENAS]
 
-    gravados = []
-    coletadas = 0
+    saved_paths = []
+    arenas_with_results = 0
     with ThreadPoolExecutor(max_workers=max(1, min(ARENAS_EM_PARALELO, len(arenas)))) as executor:
-        rodadas = {
-            executor.submit(ArenaExtractor(arena, modo_visivel).run): arena for arena in arenas
+        arena_by_future = {
+            executor.submit(ArenaExtractor(arena, visible_browser).run): arena for arena in arenas
         }
-        for rodada in as_completed(rodadas):
-            paths, quadras, texto = rodada.result()
-            print(texto, end="")
-            registrar_verificacao(rodadas[rodada]["nome"], quadras, DIRETORIO_LOGS)
-            coletadas += bool(paths)
-            gravados.extend(paths)
+        for completed_run in as_completed(arena_by_future):
+            paths, verified_courts, run_log = completed_run.result()
+            print(run_log, end="")
+            registrar_verificacao(
+                arena_by_future[completed_run]["nome"], verified_courts, DIRETORIO_LOGS
+            )
+            arenas_with_results += bool(paths)
+            saved_paths.extend(paths)
 
-    if not gravados:
+    if not saved_paths:
         print("\n[ERRO] nenhuma quadra coletada em nenhuma arena.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n>> Rodada concluída: {len(gravados)} arquivo(s) de quadra "
-          f"em {coletadas} de {len(ARENAS)} arena(s).")
+    print(f"\n>> Rodada concluída: {len(saved_paths)} arquivo(s) de quadra "
+          f"em {arenas_with_results} de {len(ARENAS)} arena(s).")
     print()
 
 
