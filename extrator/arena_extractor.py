@@ -14,173 +14,178 @@ from extrator.persistencia import salvar_extracao
 from extrator.tratamento import TratamentoDeDados
 from extrator.weather_collector import coletar_clima, coletar_previsao
 
-TRAVA_DA_GEOCODIFICACAO = threading.Lock()
+GEOCODING_LOCK = threading.Lock()
 
 
-def coletar_quadras(arena: dict, modo_visivel: bool = False, saida=None) -> list[dict]:
+def collect_courts(arena: dict, visible_browser: bool = False, output=None) -> list[dict]:
     """Lista os esportes pela API e varre os horários de cada esporte alvo com o
     navegador. Um esporte que estoura o tempo vira aviso e não interrompe os demais."""
-    saida = saida or sys.stdout
-    print(">> TÉCNICA 1 (API JSON, sem navegador): listando esportes...\n", file=saida)
-    esportes = listar_esportes(arena["url"])
-    for i, e in enumerate(esportes, 1):
-        print(f"   {i}. {e}", file=saida)
+    output = output or sys.stdout
+    print(">> TÉCNICA 1 (API JSON, sem navegador): listando esportes...\n", file=output)
+    sports = listar_esportes(arena["url"])
+    for position, sport in enumerate(sports, 1):
+        print(f"   {position}. {sport}", file=output)
 
-    alvos = esportes_alvo(esportes, arena["tipos"])
-    ausentes = tipos_ausentes(alvos, arena["tipos"])
-    if ausentes:
-        print(f"\n[AVISO] tipos de quadra não encontrados no site: {', '.join(ausentes)}",
-              file=saida)
+    target_sports = esportes_alvo(sports, arena["tipos"])
+    missing_types = tipos_ausentes(target_sports, arena["tipos"])
+    if missing_types:
+        print(f"\n[AVISO] tipos de quadra não encontrados no site: {', '.join(missing_types)}",
+              file=output)
 
-    resultados = []
-    for esporte in alvos:
-        print(f"\n>> TÉCNICA 2 (Playwright): horários de '{esporte}' (todos os períodos)...",
-              file=saida)
+    results = []
+    for sport in target_sports:
+        print(f"\n>> TÉCNICA 2 (Playwright): horários de '{sport}' (todos os períodos)...",
+              file=output)
         try:
-            resultados.extend(
+            results.extend(
                 coletar_horarios(
-                    esporte,
+                    sport,
                     arena["url"],
                     periodo=None,
-                    headless=not modo_visivel,
+                    headless=not visible_browser,
                     tipos=arena["tipos"],
                 )
             )
-        except PWTimeout as erro:
-            print(f"[AVISO] {arena['nome']}: '{esporte}' pulado por tempo esgotado: {erro}",
+        except PWTimeout as error:
+            print(f"[AVISO] {arena['nome']}: '{sport}' pulado por tempo esgotado: {error}",
                   file=sys.stderr)
-    return resultados
+    return results
 
 
-def registrar_local(arena: dict, resultados: list[dict], saida=None) -> dict | None:
+def record_location(arena: dict, results: list[dict], output=None) -> dict | None:
     """Geocodifica o endereço mais observado da rodada, uma arena por vez. Devolve None
     quando o endereço não é reconhecido, e nesse caso a rodada segue sem clima."""
-    saida = saida or sys.stdout
-    print(f"\n>> LOCAL (Nominatim): onde fica a {arena['nome']}...", file=saida)
+    output = output or sys.stdout
+    print(f"\n>> LOCAL (Nominatim): onde fica a {arena['nome']}...", file=output)
     try:
-        with TRAVA_DA_GEOCODIFICACAO:
-            local = resolver_local(
-                endereco_observado(resultados), arena["diretorio"], arena["coordenadas"]
+        with GEOCODING_LOCK:
+            location = resolver_local(
+                endereco_observado(results), arena["diretorio"], arena["coordenadas"]
             )
-    except (requests.RequestException, ValueError) as erro:
-        print(f"[AVISO] {arena['nome']}: endereço não geocodificado: {erro}", file=sys.stderr)
+    except (requests.RequestException, ValueError) as error:
+        print(f"[AVISO] {arena['nome']}: endereço não geocodificado: {error}", file=sys.stderr)
         return None
 
-    if local is None:
+    if location is None:
         print(f"[AVISO] {arena['nome']}: sem endereço reconhecido, rodada sem clima.",
               file=sys.stderr)
         return None
-    print(f"   {local['endereco']} -> {local['latitude']}, {local['longitude']}", file=saida)
-    return local
+    print(f"   {location['endereco']} -> {location['latitude']}, {location['longitude']}",
+          file=output)
+    return location
 
 
-def registrar_clima(local: dict, diretorio: str, saida=None, nome: str = "") -> str | None:
+def record_weather(
+    location: dict, directory: str, output=None, arena_name: str = ""
+) -> str | None:
     """Grava as condições atuais do ponto da arena. Falha de rede vira aviso e None."""
-    saida = saida or sys.stdout
-    print("\n>> CLIMA (API Open-Meteo): condições atuais na arena...", file=saida)
+    output = output or sys.stdout
+    print("\n>> CLIMA (API Open-Meteo): condições atuais na arena...", file=output)
     try:
-        caminho = coletar_clima(local["latitude"], local["longitude"], diretorio)
-    except (requests.RequestException, ValueError) as erro:
-        print(f"[AVISO] {nome}: clima não coletado: {erro}", file=sys.stderr)
+        path = coletar_clima(location["latitude"], location["longitude"], directory)
+    except (requests.RequestException, ValueError) as error:
+        print(f"[AVISO] {arena_name}: clima não coletado: {error}", file=sys.stderr)
         return None
-    print(f"   registrado em {caminho}", file=saida)
-    return caminho
+    print(f"   registrado em {path}", file=output)
+    return path
 
 
-def registrar_previsao(local: dict, diretorio: str, saida=None, nome: str = "") -> str | None:
+def record_forecast(
+    location: dict, directory: str, output=None, arena_name: str = ""
+) -> str | None:
     """Grava a previsão hora a hora do ponto da arena. Falha de rede vira aviso e None."""
-    saida = saida or sys.stdout
-    print("\n>> PREVISÃO (API Open-Meteo): horas à frente na arena...", file=saida)
+    output = output or sys.stdout
+    print("\n>> PREVISÃO (API Open-Meteo): horas à frente na arena...", file=output)
     try:
-        caminho = coletar_previsao(local["latitude"], local["longitude"], diretorio)
-    except (requests.RequestException, ValueError) as erro:
-        print(f"[AVISO] {nome}: previsão não coletada: {erro}", file=sys.stderr)
+        path = coletar_previsao(location["latitude"], location["longitude"], directory)
+    except (requests.RequestException, ValueError) as error:
+        print(f"[AVISO] {arena_name}: previsão não coletada: {error}", file=sys.stderr)
         return None
-    print(f"   registrada em {caminho}", file=saida)
-    return caminho
+    print(f"   registrada em {path}", file=output)
+    return path
 
 
-def _imprimir_extracao(dados: dict, saida=None) -> None:
+def _print_extraction(data: dict, output=None) -> None:
     """Imprime o bloco de uma quadra em um período, com os horários e o total de livres."""
-    saida = saida or sys.stdout
-    print("\n" + "=" * 46, file=saida)
-    print(f"  {dados['esporte']}  |  {dados['data']}  |  Período: {dados['periodo']}", file=saida)
-    if dados["quadra"]:
-        cobertura = {"true": "coberta", "false": "descoberta"}.get(dados["quadra_coberta"], "?")
-        print(f"  {dados['quadra']}  ({cobertura})", file=saida)
-    if dados.get("endereco"):
-        print(f"  {dados['endereco']}", file=saida)
-    print(f"  Coletado em: {dados['coletado_em']}", file=saida)
-    print("=" * 46, file=saida)
-    if dados["aviso"]:
-        print(f"  ⚠️  {dados['aviso']}", file=saida)
-        print("=" * 46, file=saida)
+    output = output or sys.stdout
+    print("\n" + "=" * 46, file=output)
+    print(f"  {data['esporte']}  |  {data['data']}  |  Período: {data['periodo']}", file=output)
+    if data["quadra"]:
+        coverage = {"true": "coberta", "false": "descoberta"}.get(data["quadra_coberta"], "?")
+        print(f"  {data['quadra']}  ({coverage})", file=output)
+    if data.get("endereco"):
+        print(f"  {data['endereco']}", file=output)
+    print(f"  Coletado em: {data['coletado_em']}", file=output)
+    print("=" * 46, file=output)
+    if data["aviso"]:
+        print(f"  ⚠️  {data['aviso']}", file=output)
+        print("=" * 46, file=output)
         return
-    for h in dados["horarios"]:
-        marca = "🟢" if h["status"].lower() == "livre" else "🔴"
-        preco = f"  R$ {h['valor']:.2f}" if h.get("valor") is not None else ""
-        print(f"  {marca} {h['hora']}  -  {h['status']}{preco}", file=saida)
-    livres = [h["hora"] for h in dados["horarios"] if h["status"].lower() == "livre"]
-    print("=" * 46, file=saida)
-    print(f"  Livres: {len(livres)}  ->  {', '.join(livres) or '(nenhum)'}", file=saida)
+    for slot in data["horarios"]:
+        marker = "🟢" if slot["status"].lower() == "livre" else "🔴"
+        price = f"  R$ {slot['valor']:.2f}" if slot.get("valor") is not None else ""
+        print(f"  {marker} {slot['hora']}  -  {slot['status']}{price}", file=output)
+    free_hours = [slot["hora"] for slot in data["horarios"] if slot["status"].lower() == "livre"]
+    print("=" * 46, file=output)
+    print(f"  Livres: {len(free_hours)}  ->  {', '.join(free_hours) or '(nenhum)'}", file=output)
 
 
-def _imprimir_resumo(
-    arena: dict, paths: list[str], enriquecidos: list[str], saida=None
+def _print_summary(
+    arena: dict, paths: list[str], enriched_paths: list[str], output=None
 ) -> None:
     """Imprime quantos arquivos de quadra a arena gravou e quantos receberam clima."""
-    saida = saida or sys.stdout
+    output = output or sys.stdout
     print(f"\n>> {arena['nome']}: extração salva/atualizada em {len(paths)} arquivo(s):",
-          file=saida)
+          file=output)
     for path in paths:
-        print(f"   {path}", file=saida)
-    print(f">> Clima aplicado em {len(enriquecidos)} arquivo(s) de quadra.", file=saida)
+        print(f"   {path}", file=output)
+    print(f">> Clima aplicado em {len(enriched_paths)} arquivo(s) de quadra.", file=output)
 
 
-def quadras_verificadas(resultados: list[dict]) -> list[str]:
+def verified_court_names(results: list[dict]) -> list[str]:
     """Devolve os nomes das quadras que renderam horários, sem repetição e ordenados."""
-    return sorted({d["quadra"] for d in resultados if d["quadra"] and not d["aviso"]})
+    return sorted({result["quadra"] for result in results if result["quadra"] and not result["aviso"]})
 
 
 class ArenaExtractor:
     """Executa o pipeline de uma arena: quadras, local, gravação, clima e tratamento.
     Cada chamada de `run` acumula o próprio log, então a instância pode ser reusada."""
 
-    def __init__(self, arena: dict, modo_visivel: bool = False) -> None:
+    def __init__(self, arena: dict, visible_browser: bool = False) -> None:
         self.arena = arena
-        self.modo_visivel = modo_visivel
+        self.visible_browser = visible_browser
 
     def run(self) -> tuple[list[str], list[str], str]:
         """Roda a arena isolando falhas e devolve os paths gravados, as quadras
         verificadas e o log da rodada, que o chamador imprime quando quiser."""
-        saida = io.StringIO()
-        print("\n" + "#" * 46, file=saida)
-        print(f"  ARENA: {self.arena['nome']}  ({self.arena['url']})", file=saida)
-        print("#" * 46, file=saida)
+        output = io.StringIO()
+        print("\n" + "#" * 46, file=output)
+        print(f"  ARENA: {self.arena['nome']}  ({self.arena['url']})", file=output)
+        print("#" * 46, file=output)
         try:
-            paths, quadras = self._executar(saida)
-        except (PWTimeout, requests.RequestException, ValueError) as erro:
-            print(f"[AVISO] arena '{self.arena['nome']}' pulada: {erro}", file=sys.stderr)
-            paths, quadras = [], []
-        return paths, quadras, saida.getvalue()
+            paths, court_names = self._execute(output)
+        except (PWTimeout, requests.RequestException, ValueError) as error:
+            print(f"[AVISO] arena '{self.arena['nome']}' pulada: {error}", file=sys.stderr)
+            paths, court_names = [], []
+        return paths, court_names, output.getvalue()
 
-    def _executar(self, saida) -> tuple[list[str], list[str]]:
+    def _execute(self, output) -> tuple[list[str], list[str]]:
         """Encadeia as etapas da arena na ordem em que uma depende da anterior."""
-        resultados = coletar_quadras(self.arena, self.modo_visivel, saida)
-        for dados in resultados:
-            _imprimir_extracao(dados, saida)
+        results = collect_courts(self.arena, self.visible_browser, output)
+        for data in results:
+            _print_extraction(data, output)
 
-        local = registrar_local(self.arena, resultados, saida)
+        location = record_location(self.arena, results, output)
         paths = salvar_extracao(
-            resultados,
+            results,
             self.arena["diretorio"],
             arena=self.arena["nome"],
-            cidade=(local or {}).get("cidade", ""),
+            cidade=(location or {}).get("cidade", ""),
         )
-        if local:
-            registrar_clima(local, self.arena["diretorio"], saida, self.arena["nome"])
-            registrar_previsao(local, self.arena["diretorio"], saida, self.arena["nome"])
+        if location:
+            record_weather(location, self.arena["diretorio"], output, self.arena["nome"])
+            record_forecast(location, self.arena["diretorio"], output, self.arena["nome"])
 
-        enriquecidos = TratamentoDeDados(self.arena["diretorio"]).aplicar()
-        _imprimir_resumo(self.arena, paths, enriquecidos, saida)
-        return paths, quadras_verificadas(resultados)
+        enriched_paths = TratamentoDeDados(self.arena["diretorio"]).aplicar()
+        _print_summary(self.arena, paths, enriched_paths, output)
+        return paths, verified_court_names(results)

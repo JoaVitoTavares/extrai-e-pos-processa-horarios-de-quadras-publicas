@@ -78,8 +78,8 @@ def clima_dublado(monkeypatch):
 def etapas(monkeypatch, tratamento_dublado):
     ordem = tratamento_dublado
     monkeypatch.setattr(
-        arena_extractor, "coletar_quadras",
-        lambda arena, modo_visivel=False, saida=None: ordem.append("quadras") or [quadra()],
+        arena_extractor, "collect_courts",
+        lambda arena, visible_browser=False, output=None: ordem.append("quadras") or [quadra()],
     )
     monkeypatch.setattr(
         arena_extractor, "resolver_local",
@@ -136,7 +136,7 @@ def test_cada_arena_grava_no_seu_diretorio(monkeypatch, etapas):
 def test_arena_carimba_nome_e_cidade_na_gravacao(monkeypatch):
     recebido = {}
     monkeypatch.setattr(
-        arena_extractor, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: [quadra()]
+        arena_extractor, "collect_courts", lambda arena, visible_browser=False, output=None: [quadra()]
     )
     monkeypatch.setattr(
         arena_extractor, "salvar_extracao",
@@ -153,7 +153,7 @@ def test_grava_o_que_o_coletor_devolveu(monkeypatch):
     coletado = [quadra(horarios=[{"hora": "17:00", "status": "Livre"}])]
     gravado = []
     monkeypatch.setattr(
-        arena_extractor, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: coletado
+        arena_extractor, "collect_courts", lambda arena, visible_browser=False, output=None: coletado
     )
     monkeypatch.setattr(
         arena_extractor, "salvar_extracao",
@@ -168,7 +168,7 @@ def test_grava_o_que_o_coletor_devolveu(monkeypatch):
 def test_clima_e_consultado_nas_coordenadas_da_arena(monkeypatch):
     consultado = {}
     monkeypatch.setattr(
-        arena_extractor, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: [quadra()]
+        arena_extractor, "collect_courts", lambda arena, visible_browser=False, output=None: [quadra()]
     )
     monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
     monkeypatch.setattr(
@@ -186,7 +186,7 @@ def test_clima_e_consultado_nas_coordenadas_da_arena(monkeypatch):
 def test_arena_sem_local_nao_consulta_clima(monkeypatch):
     chamou = []
     monkeypatch.setattr(
-        arena_extractor, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: [quadra()]
+        arena_extractor, "collect_courts", lambda arena, visible_browser=False, output=None: [quadra()]
     )
     monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
     monkeypatch.setattr(arena_extractor, "resolver_local", lambda endereco, diretorio, coordenadas: None)
@@ -199,7 +199,7 @@ def test_arena_sem_local_nao_consulta_clima(monkeypatch):
 
 def test_falha_do_geocodificador_nao_derruba_a_execucao(monkeypatch, capsys):
     monkeypatch.setattr(
-        arena_extractor, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: [quadra()]
+        arena_extractor, "collect_courts", lambda arena, visible_browser=False, output=None: [quadra()]
     )
     monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
     monkeypatch.setattr(arena_extractor, "resolver_local", _que_falha(requests.ConnectionError("sem rede")))
@@ -211,7 +211,7 @@ def test_falha_do_geocodificador_nao_derruba_a_execucao(monkeypatch, capsys):
 
 def test_falha_no_clima_nao_derruba_a_execucao(monkeypatch, capsys):
     monkeypatch.setattr(
-        arena_extractor, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: [quadra()]
+        arena_extractor, "collect_courts", lambda arena, visible_browser=False, output=None: [quadra()]
     )
     monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
     monkeypatch.setattr(arena_extractor, "coletar_clima", _que_falha(requests.ConnectionError("sem rede")))
@@ -224,7 +224,7 @@ def test_falha_no_clima_nao_derruba_a_execucao(monkeypatch, capsys):
 def test_json_de_clima_invalido_tambem_e_tolerado(monkeypatch, capsys):
     monkeypatch.setattr(arena_extractor, "coletar_clima", _que_falha(ValueError("sem o bloco 'current'")))
 
-    assert arena_extractor.registrar_clima(LOCAL, "qualquer") is None
+    assert arena_extractor.record_weather(LOCAL, "qualquer") is None
     assert "clima não coletado" in capsys.readouterr().err
 
 
@@ -232,12 +232,12 @@ def test_arena_que_falha_nao_derruba_as_outras(monkeypatch, capsys):
     monkeypatch.setattr(main, "ARENAS", [ARENA, OUTRA_ARENA])
     monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
 
-    def coletar(arena, modo_visivel=False, saida=None):
+    def coletar(arena, visible_browser=False, output=None):
         if arena["nome"] == "SP Sports":
             raise PWTimeout("tempo esgotado")
         return [quadra()]
 
-    monkeypatch.setattr(arena_extractor, "coletar_quadras", coletar)
+    monkeypatch.setattr(arena_extractor, "collect_courts", coletar)
     main.main()
 
     assert "SP Sports" in capsys.readouterr().err
@@ -249,11 +249,11 @@ def test_arenas_rodam_ao_mesmo_tempo(monkeypatch):
     monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
     barreira = threading.Barrier(2, timeout=5)
 
-    def coletar(arena, modo_visivel=False, saida=None):
+    def coletar(arena, visible_browser=False, output=None):
         barreira.wait()
         return [quadra()]
 
-    monkeypatch.setattr(arena_extractor, "coletar_quadras", coletar)
+    monkeypatch.setattr(arena_extractor, "collect_courts", coletar)
 
     main.main()
 
@@ -263,9 +263,9 @@ def test_saida_de_cada_arena_sai_num_bloco_so(monkeypatch, capsys):
     monkeypatch.setattr(main, "ARENAS_EM_PARALELO", 2)
     monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
     monkeypatch.setattr(
-        arena_extractor, "coletar_quadras",
-        lambda arena, modo_visivel=False, saida=None:
-            print(f"marca de {arena['nome']}", file=saida) or [quadra()],
+        arena_extractor, "collect_courts",
+        lambda arena, visible_browser=False, output=None:
+            print(f"marca de {arena['nome']}", file=output) or [quadra()],
     )
 
     main.main()
@@ -289,8 +289,8 @@ def test_log_de_verificacoes_tem_uma_linha_por_arena(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "ARENAS", [ARENA, OUTRA_ARENA])
     monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda r, diretorio, **kwargs: ["um.csv"])
     monkeypatch.setattr(
-        arena_extractor, "coletar_quadras",
-        lambda arena, modo_visivel=False, saida=None: [
+        arena_extractor, "collect_courts",
+        lambda arena, visible_browser=False, output=None: [
             quadra("Areia 2 - Externa"),
             quadra("Areia 1 - Interna"),
             quadra("Areia 1 - Interna", data="2026-08-08"),
@@ -307,7 +307,7 @@ def test_log_de_verificacoes_tem_uma_linha_por_arena(monkeypatch, tmp_path):
 
 
 def test_arena_que_falhou_aparece_no_log_sem_quadra_nenhuma(monkeypatch, tmp_path):
-    monkeypatch.setattr(arena_extractor, "coletar_quadras", _que_falha(PWTimeout("tempo esgotado")))
+    monkeypatch.setattr(arena_extractor, "collect_courts", _que_falha(PWTimeout("tempo esgotado")))
 
     with pytest.raises(SystemExit):
         main.main()
@@ -324,11 +324,11 @@ def test_periodo_com_aviso_nao_entra_nas_quadras_verificadas():
         quadra("Areia 2 - Externa", aviso="Não foi possível coletar os horários."),
     ]
 
-    assert arena_extractor.quadras_verificadas(resultados) == ["Areia 1 - Interna"]
+    assert arena_extractor.verified_court_names(resultados) == ["Areia 1 - Interna"]
 
 
 def test_sai_com_erro_quando_nao_grava_nada(monkeypatch):
-    monkeypatch.setattr(arena_extractor, "coletar_quadras", lambda arena, modo_visivel=False, saida=None: [])
+    monkeypatch.setattr(arena_extractor, "collect_courts", lambda arena, visible_browser=False, output=None: [])
     monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda r, diretorio, **kwargs: [])
 
     with pytest.raises(SystemExit) as saida:
@@ -348,7 +348,7 @@ def test_esporte_que_estoura_o_tempo_nao_derruba_os_outros(monkeypatch, capsys):
         return [quadra(nome="Grama 5 - Interna")]
 
     monkeypatch.setattr(arena_extractor, "coletar_horarios", coletar)
-    resultados = arena_extractor.coletar_quadras(main.normalize_arena_info(ARENA))
+    resultados = arena_extractor.collect_courts(main.normalize_arena_info(ARENA))
 
     assert [q["quadra"] for q in resultados] == ["Grama 5 - Interna"]
     assert "Grama 7" in capsys.readouterr().err
@@ -365,7 +365,7 @@ def test_modo_visivel_desliga_o_headless(monkeypatch):
             recebido.update(headless=headless, url=url_arena) or [],
     )
 
-    arena_extractor.coletar_quadras(main.normalize_arena_info(ARENA), modo_visivel=True)
+    arena_extractor.collect_courts(main.normalize_arena_info(ARENA), visible_browser=True)
 
     assert recebido["headless"] is False
     assert recebido["url"] == ARENA["url"]
@@ -381,7 +381,7 @@ def test_arena_procura_os_tipos_de_quadra_que_ela_declara(monkeypatch):
     )
     arena = dict(OUTRA_ARENA, tipos=["Futebol society"])
 
-    arena_extractor.coletar_quadras(main.normalize_arena_info(arena))
+    arena_extractor.collect_courts(main.normalize_arena_info(arena))
 
     assert recebido == {"esporte": "Futebol society", "tipos": ["Futebol society"]}
 
@@ -395,7 +395,7 @@ def test_imprime_livre_e_indisponivel_com_marcas_diferentes(capsys):
         {"hora": "17:00", "status": "Livre", "valor": 150.0},
         {"hora": "18:00", "status": "Indisponível"},
     ])
-    arena_extractor._imprimir_extracao(dados)
+    arena_extractor._print_extraction(dados)
     saida = capsys.readouterr().out
 
     assert "🟢 17:00  -  Livre  R$ 150.00" in saida
@@ -406,7 +406,7 @@ def test_imprime_livre_e_indisponivel_com_marcas_diferentes(capsys):
 
 def test_periodo_com_aviso_imprime_so_o_aviso(capsys):
     dados = quadra(aviso="Não foi possível coletar os horários deste período.")
-    arena_extractor._imprimir_extracao(dados)
+    arena_extractor._print_extraction(dados)
     saida = capsys.readouterr().out
 
     assert "Não foi possível coletar" in saida
