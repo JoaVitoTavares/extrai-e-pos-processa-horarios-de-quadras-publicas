@@ -18,8 +18,6 @@ GEOCODING_LOCK = threading.Lock()
 
 
 def collect_courts(arena: dict, visible_browser: bool = False, output=None) -> list[dict]:
-    """Lista os esportes pela API e varre os horários de cada esporte alvo com o
-    navegador. Um esporte que estoura o tempo vira aviso e não interrompe os demais."""
     output = output or sys.stdout
     print(">> TÉCNICA 1 (API JSON, sem navegador): listando esportes...\n", file=output)
     sports = listar_esportes(arena["url"])
@@ -53,8 +51,6 @@ def collect_courts(arena: dict, visible_browser: bool = False, output=None) -> l
 
 
 def record_location(arena: dict, results: list[dict], output=None) -> dict | None:
-    """Geocodifica o endereço mais observado da rodada, uma arena por vez. Devolve None
-    quando o endereço não é reconhecido, e nesse caso a rodada segue sem clima."""
     output = output or sys.stdout
     print(f"\n>> LOCAL (Nominatim): onde fica a {arena['nome']}...", file=output)
     try:
@@ -105,73 +101,36 @@ def record_forecast(
     return path
 
 
-def _print_extraction(data: dict, output=None) -> None:
-    """Imprime o bloco de uma quadra em um período, com os horários e o total de livres."""
-    output = output or sys.stdout
-    print("\n" + "=" * 46, file=output)
-    print(f"  {data['esporte']}  |  {data['data']}  |  Período: {data['periodo']}", file=output)
-    if data["quadra"]:
-        coverage = {"true": "coberta", "false": "descoberta"}.get(data["quadra_coberta"], "?")
-        print(f"  {data['quadra']}  ({coverage})", file=output)
-    if data.get("endereco"):
-        print(f"  {data['endereco']}", file=output)
-    print(f"  Coletado em: {data['coletado_em']}", file=output)
-    print("=" * 46, file=output)
-    if data["aviso"]:
-        print(f"  ⚠️  {data['aviso']}", file=output)
-        print("=" * 46, file=output)
-        return
-    for slot in data["horarios"]:
-        marker = "🟢" if slot["status"].lower() == "livre" else "🔴"
-        price = f"  R$ {slot['valor']:.2f}" if slot.get("valor") is not None else ""
-        print(f"  {marker} {slot['hora']}  -  {slot['status']}{price}", file=output)
-    free_hours = [slot["hora"] for slot in data["horarios"] if slot["status"].lower() == "livre"]
-    print("=" * 46, file=output)
-    print(f"  Livres: {len(free_hours)}  ->  {', '.join(free_hours) or '(nenhum)'}", file=output)
-
-
-def _print_summary(
-    arena: dict, paths: list[str], enriched_paths: list[str], output=None
-) -> None:
-    output = output or sys.stdout
-    print(f"\n>> {arena['nome']}: extração salva/atualizada em {len(paths)} arquivo(s):",
-          file=output)
-    for path in paths:
-        print(f"   {path}", file=output)
-    print(f">> Clima aplicado em {len(enriched_paths)} arquivo(s) de quadra.", file=output)
-
-
-def verified_court_names(results: list[dict]) -> list[str]:
-    return sorted({result["quadra"] for result in results if result["quadra"] and not result["aviso"]})
-
-
 class ArenaExtractor:
     """Executa o pipeline de uma arena: quadras, local, gravação, clima e tratamento.
     Cada chamada de `extract_isolating_failures` acumula o próprio log, então a
-    instância pode ser reusada."""
+    instância pode ser reusada em sequência, mas não em paralelo."""
 
     def __init__(self, arena: dict, visible_browser: bool = False) -> None:
         self.arena = arena
         self.visible_browser = visible_browser
+        self.output = sys.stdout
 
     def extract_isolating_failures(self) -> tuple[list[str], list[str], str]:
-        output = io.StringIO()
-        print("\n" + "#" * 46, file=output)
-        print(f"  ARENA: {self.arena['nome']}  ({self.arena['url']})", file=output)
-        print("#" * 46, file=output)
+        self.output = io.StringIO()
+        self._print_arena_header()
         try:
-            paths, court_names = self._extract_pipeline(output)
+            paths, court_names = self._extract_pipeline()
         except (PWTimeout, requests.RequestException, ValueError) as error:
             print(f"[AVISO] arena '{self.arena['nome']}' pulada: {error}", file=sys.stderr)
             paths, court_names = [], []
-        return paths, court_names, output.getvalue()
+        return paths, court_names, self.output.getvalue()
 
-    def _extract_pipeline(self, output) -> tuple[list[str], list[str]]:
-        results = collect_courts(self.arena, self.visible_browser, output)
+    @staticmethod
+    def verified_court_names(results: list[dict]) -> list[str]:
+        return sorted({result["quadra"] for result in results if result["quadra"] and not result["aviso"]})
+
+    def _extract_pipeline(self) -> tuple[list[str], list[str]]:
+        results = collect_courts(self.arena, self.visible_browser, self.output)
         for data in results:
-            _print_extraction(data, output)
+            self._print_extraction(data)
 
-        location = record_location(self.arena, results, output)
+        location = record_location(self.arena, results, self.output)
         paths = salvar_extracao(
             results,
             self.arena["diretorio"],
@@ -179,9 +138,48 @@ class ArenaExtractor:
             cidade=(location or {}).get("cidade", ""),
         )
         if location:
-            record_weather(location, self.arena["diretorio"], output, self.arena["nome"])
-            record_forecast(location, self.arena["diretorio"], output, self.arena["nome"])
+            record_weather(location, self.arena["diretorio"], self.output, self.arena["nome"])
+            record_forecast(location, self.arena["diretorio"], self.output, self.arena["nome"])
 
         enriched_paths = TratamentoDeDados(self.arena["diretorio"]).aplicar()
-        _print_summary(self.arena, paths, enriched_paths, output)
-        return paths, verified_court_names(results)
+        self._print_summary(paths, enriched_paths)
+        return paths, self.verified_court_names(results)
+
+    def _print_arena_header(self) -> None:
+        print("\n" + "#" * 46, file=self.output)
+        print(f"  ARENA: {self.arena['nome']}  ({self.arena['url']})", file=self.output)
+        print("#" * 46, file=self.output)
+
+    def _print_extraction(self, data: dict) -> None:
+        """Imprime o bloco de uma quadra em um período, com os horários e o total de livres."""
+        print("\n" + "=" * 46, file=self.output)
+        print(f"  {data['esporte']}  |  {data['data']}  |  Período: {data['periodo']}",
+              file=self.output)
+        if data["quadra"]:
+            coverage = {"true": "coberta", "false": "descoberta"}.get(data["quadra_coberta"], "?")
+            print(f"  {data['quadra']}  ({coverage})", file=self.output)
+        if data.get("endereco"):
+            print(f"  {data['endereco']}", file=self.output)
+        print(f"  Coletado em: {data['coletado_em']}", file=self.output)
+        print("=" * 46, file=self.output)
+        if data["aviso"]:
+            print(f"  ⚠️  {data['aviso']}", file=self.output)
+            print("=" * 46, file=self.output)
+            return
+        for slot in data["horarios"]:
+            marker = "🟢" if slot["status"].lower() == "livre" else "🔴"
+            price = f"  R$ {slot['valor']:.2f}" if slot.get("valor") is not None else ""
+            print(f"  {marker} {slot['hora']}  -  {slot['status']}{price}", file=self.output)
+        free_hours = [slot["hora"] for slot in data["horarios"]
+                      if slot["status"].lower() == "livre"]
+        print("=" * 46, file=self.output)
+        print(f"  Livres: {len(free_hours)}  ->  {', '.join(free_hours) or '(nenhum)'}",
+              file=self.output)
+
+    def _print_summary(self, paths: list[str], enriched_paths: list[str]) -> None:
+        print(f"\n>> {self.arena['nome']}: extração salva/atualizada em {len(paths)} arquivo(s):",
+              file=self.output)
+        for path in paths:
+            print(f"   {path}", file=self.output)
+        print(f">> Clima aplicado em {len(enriched_paths)} arquivo(s) de quadra.",
+              file=self.output)

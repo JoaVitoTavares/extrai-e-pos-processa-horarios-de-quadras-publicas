@@ -10,6 +10,10 @@ from playwright.sync_api import TimeoutError as PWTimeout
 
 import main
 from extrator import arena_extractor
+from extrator.config import ARENAS, DIRETORIO_EXTRACOES, DIRETORIO_LOGS, ARENAS_EM_PARALELO
+from extrator.localizacao import resolver_local
+from extrator.persistencia import salvar_extracao
+from extrator.weather_collector import coletar_clima, coletar_previsao
 
 ARENA = {"nome": "SP Sports", "url": "https://webarena.app/arena/sp-sports"}
 OUTRA_ARENA = {"nome": "Arena Parobé", "url": "https://webarena.app/arena/parobe"}
@@ -324,7 +328,7 @@ def test_periodo_com_aviso_nao_entra_nas_quadras_verificadas():
         quadra("Areia 2 - Externa", aviso="Não foi possível coletar os horários."),
     ]
 
-    assert arena_extractor.verified_court_names(resultados) == ["Areia 1 - Interna"]
+    assert arena_extractor.ArenaExtractor.verified_court_names(resultados) == ["Areia 1 - Interna"]
 
 
 def test_sai_com_erro_quando_nao_grava_nada(monkeypatch):
@@ -395,7 +399,7 @@ def test_imprime_livre_e_indisponivel_com_marcas_diferentes(capsys):
         {"hora": "17:00", "status": "Livre", "valor": 150.0},
         {"hora": "18:00", "status": "Indisponível"},
     ])
-    arena_extractor._print_extraction(dados)
+    arena_extractor.ArenaExtractor(ARENA)._print_extraction(dados)
     saida = capsys.readouterr().out
 
     assert "🟢 17:00  -  Livre  R$ 150.00" in saida
@@ -406,7 +410,7 @@ def test_imprime_livre_e_indisponivel_com_marcas_diferentes(capsys):
 
 def test_periodo_com_aviso_imprime_so_o_aviso(capsys):
     dados = quadra(aviso="Não foi possível coletar os horários deste período.")
-    arena_extractor._print_extraction(dados)
+    arena_extractor.ArenaExtractor(ARENA)._print_extraction(dados)
     saida = capsys.readouterr().out
 
     assert "Não foi possível coletar" in saida
