@@ -7,14 +7,14 @@ from datetime import date, datetime, timedelta
 from urllib.parse import urljoin
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
-from config import (
+from extrator.config import (
     CAMINHO_API_INIT,
     DIAS_A_FRENTE,
     PERIODOS_PADRAO,
     TIMEOUT_NAVEGACAO_MS,
     TIPOS_QUADRA,
 )
-from persistencia import sem_acento
+from extrator.persistencia import sem_acento
 
 PADRAO_HORARIO = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(Livre|Indispon\w+)", re.IGNORECASE)
 PADRAO_DESCOBERTA = re.compile(r"extern|descobert", re.IGNORECASE)
@@ -82,19 +82,11 @@ def _quadra_coberta(nome: str | None) -> str:
 
 
 def _canonico(esporte: str) -> str:
-    """Reduz o nome de um esporte à forma em que ele se compara com os tipos configurados:
-    sem acento, sem caixa e com futsal e futebol de salão colapsados num nome só, que é
-    como duas arenas chamam a mesma quadra."""
     limpo = sem_acento(esporte).casefold().strip()
     return "futebol de salao" if PADRAO_FUTSAL.search(limpo) else limpo
 
 
 def _tipo_quadra(esporte: str, nome_quadra: str | None, tipos: list[str] = TIPOS_QUADRA) -> str:
-    """Canoniza o esporte selecionado para um dos tipos configurados na arena. É a grafia
-    do config que vai ao CSV, e é ela que faz as arenas que escrevem 'Futebol society' e
-    'Futebol Society' caírem na mesma linha do dataset. Quando o esporte não é
-    reconhecido, 'FUTSAL' no nome da quadra resolve para 'Futebol de salão'; fora isso o
-    esporte é devolvido como veio, sem perder dado."""
     for tipo in tipos:
         if _canonico(esporte) == _canonico(tipo):
             return tipo
@@ -108,10 +100,6 @@ def api_init_de(url_arena: str) -> str:
 
 
 def listar_esportes(url_arena: str) -> list[str]:
-    """Lista os esportes que a arena publica, sem os espaços das pontas. O site aceita o
-    nome como o dono digitou, e um " Futebol society" com espaço à esquerda não casa com o
-    texto da tela, que vem aparado: o clique no esporte erra o item e a leitura do endereço
-    não acha por onde começar — a arena coleta os horários e fica sem clima."""
     resposta = requests.get(
         api_init_de(url_arena),
         params={"location": url_arena},
@@ -129,11 +117,6 @@ def listar_esportes(url_arena: str) -> list[str]:
 
 
 def extrair_endereco(pagina, esporte: str, timeout_ms: int = TIMEOUT_NAVEGACAO_MS) -> str:
-    """Lê o endereço que a arena publica entre o nome do esporte escolhido e o campo de
-    data. É a única coisa na página que diz em que cidade a quadra fica, e é dele que
-    saem as coordenadas do clima. O que o identifica é a vírgula que separa rua e cidade,
-    que o distingue do rótulo logo abaixo. Não achando, devolve vazio: a arena passa a
-    rodada com o local que já conhecia, em vez de receber o clima de outro lugar."""
     try:
         pagina.locator(SELETOR_CAMPO_DE_DATA).first.wait_for(state="visible", timeout=timeout_ms)
     except PWTimeout:
@@ -152,10 +135,6 @@ def tipos_ausentes(alvos: list[str], tipos: list[str] = TIPOS_QUADRA) -> list[st
 
 
 def _estado_da_arena(pagina, esporte: str, timeout_ms: int) -> str:
-    """Espera a página assumir um dos estados que interessam ao coletor e diz qual: com o
-    campo de data na tela há agenda, com o aviso do site não há, e com o esporte na lista
-    falta clicar nele. `esporte` vazio pergunta só pelos dois primeiros, que é o que vale
-    depois do clique — o item da lista ainda pode estar na tela saindo."""
     estado = pagina.wait_for_function(
         SCRIPT_ESTADO_DA_ARENA,
         arg={
@@ -170,11 +149,6 @@ def _estado_da_arena(pagina, esporte: str, timeout_ms: int) -> str:
 
 
 def _escolher_esporte(pagina, esporte: str, timeout_ms: int = TIMEOUT_NAVEGACAO_MS) -> bool:
-    """Deixa a página no esporte pedido e diz se ele tem agenda para coletar. A arena de um
-    esporte só já abre com ele escolhido e mantém o item da lista escondido, então clicar
-    seria esperar por um elemento que nunca fica visível. A que não vende pela web anuncia
-    isso no lugar do campo de data, e é aqui que ela sai da rodada: insistir no calendário
-    custaria o horizonte inteiro de dias, a cada esporte e a cada quinze minutos."""
     if _estado_da_arena(pagina, esporte, timeout_ms) == "escolher":
         pagina.get_by_text(esporte, exact=True).locator("visible=true").first.click()
     return _estado_da_arena(pagina, "", timeout_ms) == "agenda"
@@ -185,14 +159,6 @@ def dias_de_coleta(hoje: date, dias_a_frente: int = DIAS_A_FRENTE) -> list[date]
 
 
 def _tentar_o_dia(pagina, rotulo: str, timeout_ms: int) -> bool:
-    """Abre o calendário pelo campo de data, avança o mês se a data não estiver na grade,
-    clica na célula e diz se a escolha pegou. O clique no campo não é cerimônia: com os
-    horários na tela um bloco do Bubble cobre as células, e é `picker--opened` que traz a
-    grade para a frente. O respiro antes do clique espera o repinte que vem logo depois de
-    abrir: sem ele o clique cai na grade velha e se perde, e a arena não fixa dia nenhum
-    em tentativa nenhuma — quem confirma é o valor do campo, e não a classe da célula. Não
-    achando a célula nem no mês seguinte, desiste em vez de insistir na grade que ficou
-    para trás: reabrir o calendário a repinta, e é de lá que a tentativa seguinte parte."""
     pagina.locator(".picker__input").first.click(timeout=timeout_ms)
     pagina.locator(".picker--opened").first.wait_for(state="attached", timeout=timeout_ms)
 
@@ -230,13 +196,6 @@ def _horarios_na_tela(pagina, timeout_ms: int = ESPERA_HORARIOS_MS) -> bool:
 def _selecionar_dia(
     pagina, dia: date, timeout_ms: int = TIMEOUT_NAVEGACAO_MS, tentativas: int = 3
 ) -> None:
-    """Deixa o calendário parado no dia pedido **com os horários dele na tela**, insistindo
-    enquanto uma das duas coisas não acontece — reabrir o calendário o repinta em torno da
-    data já selecionada, então a tentativa seguinte parte de um estado limpo. As duas
-    entram na mesma volta porque o site às vezes carimba a data no campo e não chega a
-    carregar a agenda: sem repetir o clique, a arena ficaria parada em "Escolha uma data"
-    até o tempo acabar. Não fixando, levanta PWTimeout: horários carimbados com a data
-    errada são piores do que o dia faltando."""
     rotulo = dia.strftime(FORMATO_DIA_NO_CALENDARIO)
     for _ in range(tentativas):
         if _tentar_o_dia(pagina, rotulo, timeout_ms) and _horarios_na_tela(pagina):
@@ -257,12 +216,6 @@ def _periodo_escolhido(pagina, periodo: str) -> bool:
 
 
 def _selecionar_periodo(pagina, periodo: str, texto_anterior: str, timeout_ms: int = 6_000) -> str:
-    """Clica no período e espera a tela ser a dele. Quem confirma o clique é o realce do
-    botão, e não o conteúdo: a página abre com um período já escolhido, e exigir que o
-    texto mude tiraria da coleta justamente a arena que só vende naquele período. Trocado
-    o realce, o conteúdo ainda precisa acompanhar, senão o que se lê são os horários do
-    período anterior; sem a troca dentro de `timeout_ms` o período é dado como
-    indisponível (PWTimeout), que é o caso do período sem nenhum horário à venda."""
     ja_escolhido = _periodo_escolhido(pagina, periodo)
     pagina.get_by_text(periodo, exact=True).first.click()
     pagina.wait_for_function(
@@ -278,12 +231,6 @@ def _selecionar_periodo(pagina, periodo: str, texto_anterior: str, timeout_ms: i
 
 
 def _esperar_quadras(pagina, timeout_ms: int = 5_000, intervalo_ms: int = 250) -> None:
-    """Espera todas as quadras do período terminarem de carregar. Cada RepeatingGroup
-    interno é preenchido de forma assíncrona e em ordem imprevisível, então ler cedo
-    devolve algumas quadras com zero horários — que sumiriam do CSV sem erro nenhum.
-    Só considera pronto quando toda quadra tem ao menos um horário; esperar a contagem
-    apenas estabilizar não serve, porque não distingue "terminou" de "ainda nem começou".
-    Esgotado o limite, segue com o que houver: a quadra pode estar mesmo sem horários."""
     limite = time.monotonic() + timeout_ms / 1000
     while True:
         contagens = [
@@ -316,11 +263,6 @@ def _quadra_sem_horarios(
 def _extrair_quadras(
     pagina, esporte: str, periodo: str, dia: date, tipos: list[str] = TIPOS_QUADRA
 ) -> list[dict]:
-    """Devolve um dicionário por quadra listada no período, lendo o texto de cada bloco
-    isoladamente para que os horários de uma quadra não se misturem com os da vizinha.
-    O nome da quadra é a primeira linha do bloco, e dele saem tipo e cobertura. O `dia`
-    vem do calendário, e não do relógio, porque a rodada percorre vários. Sem nenhum
-    bloco na tela, devolve um item único com `aviso`."""
     quadras = []
     for raiz in pagina.locator(SELETOR_QUADRAS).all():
         texto = raiz.inner_text()
@@ -371,11 +313,6 @@ def _preco_do_slot(textos: list[str]) -> float | None:
 
 
 def _coletar_precos(raiz, horarios: list[dict]) -> None:
-    """Para cada horário 'Livre', clica no cabeçalho do slot para revelar as opções
-    de duração e grava em `valor` o preço de 60 min (ou o único disponível) em float.
-    Indisponíveis e slots cujo preço não abre a tempo ficam sem `valor`. `raiz` é o
-    locator da quadra, e não a página: quadras diferentes repetem o mesmo horário, e
-    buscar na página inteira traria sempre o preço da primeira."""
     for h in horarios:
         if h["status"].lower() != "livre":
             continue
@@ -403,12 +340,6 @@ def _coletar_precos(raiz, horarios: list[dict]) -> None:
 def _coletar_dia(
     pagina, esporte: str, dia: date, periodos: list[str], com_preco: bool, tipos: list[str]
 ) -> list[dict]:
-    """Percorre os períodos do dia já selecionado no calendário e devolve as quadras de
-    cada um. Espera as quadras estabilizarem antes de fotografar o texto da tela: a troca
-    de dia mantém o período anterior marcado e repinta o conteúdo, e um retrato tirado
-    cedo demais faria o clique seguinte achar que a página já trocou. O período pulado
-    refotografa a tela antes de sair, senão o seguinte compararia com um retrato de dois
-    períodos atrás e daria por trocado o que ainda é do vizinho."""
     _esperar_quadras(pagina)
     texto_anterior = pagina.locator("body").inner_text()
     coletadas = []
@@ -436,13 +367,6 @@ def coletar_horarios(
     dias_a_frente: int = DIAS_A_FRENTE,
     tipos: list[str] = TIPOS_QUADRA,
 ) -> list[dict]:
-    """Abre o navegador uma vez e extrai os horários de um esporte da arena em hoje e nos
-    `dias_a_frente` seguintes. Com `periodo` informado coleta apenas aquele; com None
-    percorre PERIODOS_PADRAO. Um dia que o calendário não libere e um período cujo
-    conteúdo não troca em 6s são pulados, e a arena que não vende pela web volta só com o
-    aviso. O preço só é aberto no dia de hoje: são dezenas de cliques por rodada, e o
-    horário futuro ainda será visitado no seu próprio dia. O endereço acompanha cada
-    quadra porque é ele que diz de onde vem o clima daquela."""
     periodos = [periodo] if periodo else PERIODOS_PADRAO
 
     with sync_playwright() as p:

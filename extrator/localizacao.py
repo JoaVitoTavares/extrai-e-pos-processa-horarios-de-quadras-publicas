@@ -7,7 +7,7 @@ import time
 import requests
 from datetime import datetime
 
-from config import API_GEOCODIFICACAO, IDENTIFICACAO_GEOCODIFICACAO, PAIS_DAS_ARENAS
+from extrator.config import API_GEOCODIFICACAO, IDENTIFICACAO_GEOCODIFICACAO, PAIS_DAS_ARENAS
 
 ARQUIVO_LOCAL = "local.json"
 CAMPOS_DE_CIDADE = ("city", "town", "village", "municipality", "county")
@@ -16,10 +16,6 @@ ESPERA_ENTRE_CONSULTAS_S = 1.1
 
 
 def endereco_observado(resultados: list[dict]) -> str:
-    """Escolhe o endereço da arena entre os que as quadras trouxeram, ficando com o mais
-    repetido: o site mostra o endereço uma vez por esporte, e a leitura que falhou vem
-    vazia. Sem nenhum endereço devolve vazio, que é como esta rodada diz que não sabe
-    onde a arena fica — e não que ela mudou de lugar."""
     contagem = {}
     for quadra in resultados:
         endereco = (quadra.get("endereco") or "").strip()
@@ -29,10 +25,6 @@ def endereco_observado(resultados: list[dict]) -> str:
 
 
 def variacoes_da_consulta(endereco: str) -> list[str]:
-    """Monta as formas de perguntar o mesmo endereço ao geocodificador, da mais específica
-    para a mais genérica: como veio, sem o número do prédio e só a cidade. Para o clima a
-    cidade já basta — a grade da Open-Meteo tem quilômetros de lado —, então descer um
-    degrau vale mais do que devolver nada porque o número não está no mapa."""
     endereco = endereco.strip()
     consultas = [endereco]
     sem_numero = PADRAO_NUMERO_NA_RUA.sub("", endereco).strip(" ,")
@@ -72,9 +64,6 @@ def _cidade(achado: dict) -> str:
 
 
 def geocodificar(endereco: str) -> dict | None:
-    """Tenta as variações da consulta até uma responder, com a pausa que o serviço público
-    exige entre chamadas. Nenhuma respondendo, devolve None: sem coordenada confiável é
-    melhor ficar sem clima nesta rodada do que consultar a Open-Meteo no lugar errado."""
     for indice, consulta in enumerate(variacoes_da_consulta(endereco)):
         if indice:
             time.sleep(ESPERA_ENTRE_CONSULTAS_S)
@@ -120,11 +109,6 @@ def salvar_local(local: dict, diretorio: str, agora=None) -> str:
 
 
 def resolver_local(endereco: str, diretorio: str, coordenadas=None, agora=None) -> dict | None:
-    """Devolve onde a arena fica, geocodificando só quando o endereço observado agora é
-    diferente do que já está gravado — sem isso a coleta agendada bateria no Nominatim
-    quatro vezes por hora para reconfirmar o que não mudou. Rodada sem endereço legível
-    fica com o local já conhecido, e endereço novo que o mapa não reconhece devolve None:
-    a arena passa a rodada sem clima, em vez de receber o clima do endereço antigo."""
     gravado = local_gravado(diretorio)
     if coordenadas:
         local = {

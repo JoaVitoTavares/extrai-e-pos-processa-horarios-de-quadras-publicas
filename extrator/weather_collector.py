@@ -5,8 +5,8 @@ import pandas as pd
 import requests
 from datetime import datetime
 
-from config import API_CLIMA, DIAS_A_FRENTE, DIRETORIO_EXTRACOES, FUSO_HORARIO
-from persistencia import anexar_linha
+from extrator.config import API_CLIMA, DIAS_A_FRENTE, DIRETORIO_EXTRACOES, FUSO_HORARIO
+from extrator.persistencia import anexar_linha
 
 CAMPOS_ATUAIS = (
     "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,"
@@ -145,9 +145,6 @@ def consultar_previsao(
 
 
 def _linhas_de_previsao(horas: dict, agora: datetime, latitude: float, longitude: float) -> list[dict]:
-    """Transpõe o bloco `hourly` — que vem como uma lista por campo — em uma linha por
-    hora prevista, com o weather_code já traduzido. Um campo que a API deixe de devolver
-    vira coluna vazia, em vez de derrubar a transposição inteira."""
     def valor(campo: str, indice: int):
         valores = horas.get(campo) or []
         return valores[indice] if indice < len(valores) else ""
@@ -177,10 +174,6 @@ def salvar_previsao(
     diretorio: str = DIRETORIO_EXTRACOES,
     agora=None,
 ) -> str:
-    """Reescreve por inteiro o CSV de previsão dentro de `diretorio`. Aqui não há upsert
-    nem histórico: a previsão de uma hora só vale a mais recente, e a versão que importa
-    guardar — a que estava publicada quando a reserva foi feita — o tratamento congela na
-    própria linha da reserva. Devolve o caminho gravado."""
     agora = agora or datetime.now()
     if diretorio:
         os.makedirs(diretorio, exist_ok=True)

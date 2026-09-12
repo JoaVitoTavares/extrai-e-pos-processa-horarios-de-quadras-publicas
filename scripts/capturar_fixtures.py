@@ -9,8 +9,8 @@ from playwright.sync_api import sync_playwright
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RAIZ)
 
-import config
-import courts_collector
+from extrator import config
+from extrator import courts_collector
 
 ARENA = config.ARENAS[0]["url"]
 DIRETORIO_FIXTURES = os.path.join(RAIZ, "tests", "fixtures")
@@ -38,9 +38,6 @@ def capturar(pagina, esporte: str, periodo: str) -> str:
 
 
 def main() -> None:
-    """Sobrescreve cada fixture de CAPTURAS com o markup do site de hoje, sob um
-    cabeçalho datado. É o procedimento a rodar quando o teste de contrato acusar que o
-    HTML congelado ficou velho — nunca automaticamente."""
     with sync_playwright() as playwright:
         navegador = playwright.chromium.launch(headless=True)
         for nome_arquivo, esporte, periodo in CAPTURAS:

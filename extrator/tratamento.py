@@ -5,20 +5,20 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 
-from config import (
+from extrator.config import (
     DIRETORIO_EXTRACOES,
     HORAS_ANTES_DA_RESERVA,
     HORAS_ATE_A_RESERVA,
     TOLERANCIA_LEITURA_CLIMA_MIN,
 )
-from persistencia import (
+from extrator.persistencia import (
     COLUNAS_CSV,
     COLUNAS_DA_PREVISAO,
     COLUNAS_DE_CLIMA,
     COLUNAS_DO_CLIMA_NA_RESERVA,
     SUFIXO_CSV,
 )
-from weather_collector import ARQUIVO_CLIMA, ARQUIVO_PREVISAO
+from extrator.weather_collector import ARQUIVO_CLIMA, ARQUIVO_PREVISAO
 
 FORMATO_DATA_HORA = "%Y-%m-%dT%H:%M"
 FORMATO_CARIMBO = "%Y-%m-%dT%H:%M:%S"
@@ -32,9 +32,6 @@ def _para_datetime(texto: str, formato: str) -> datetime | None:
 
 
 def _hora_cheia(data: str, horario_inicio: str) -> str:
-    """Devolve a chave da previsão para uma reserva: a hora cheia em que ela começa, já
-    que a Open-Meteo prevê de hora em hora e o site vende slots de meia em meia. A
-    reserva das 17:30 pega a previsão das 17:00, a hora em que o jogo acontece."""
     inicio = _para_datetime(f"{data}T{horario_inicio}", FORMATO_DATA_HORA)
     return "" if inicio is None else inicio.strftime("%Y-%m-%dT%H:00")
 
@@ -57,11 +54,6 @@ class TratamentoDeDados:
         self.tolerancia_min = tolerancia_min
 
     def aplicar(self, agora=None) -> list[str]:
-        """Percorre os CSVs de quadra do diretório e escreve neles as três leituras de
-        clima: a observação mais recente nas linhas que estão na janela, e o clima do
-        instante da virada mais a previsão do horário nas reservas recém-detectadas. Sem
-        histórico de observação nem previsão nenhum arquivo é tocado. Devolve os caminhos
-        efetivamente alterados, para o gerenciador relatar o que mudou."""
         agora = agora or datetime.now()
         historico = self._historico_de_clima()
         previsoes = self._previsoes()
@@ -84,10 +76,6 @@ class TratamentoDeDados:
         return alterados
 
     def _historico_de_clima(self) -> list[tuple[datetime, dict]]:
-        """Lê o CSV de clima e devolve as observações já datadas, descartando a linha cujo
-        data_hora não converte. O arquivo é aberto uma vez por rodada, e não uma vez por
-        quadra, porque as duas buscas o percorrem inteiro: a leitura mais recente, que
-        alimenta a janela, e a mais próxima do instante de cada reserva."""
         caminho_csv = os.path.join(self.diretorio, ARQUIVO_CLIMA)
         if not os.path.exists(caminho_csv):
             return []
@@ -101,10 +89,6 @@ class TratamentoDeDados:
         return datadas
 
     def _leitura_mais_recente(self, historico: list, agora: datetime) -> dict | None:
-        """Devolve a última observação do histórico que não seja futura em relação a
-        `agora`, ou None se não houver nenhuma ou a mais nova for velha demais. Descartar
-        leitura futura protege de relógio desalinhado; descartar leitura velha evita
-        carimbar numa reserva um clima de horas atrás, pior que deixar a lacuna."""
         passadas = [par for par in historico if par[0] <= agora]
         if not passadas:
             return None
@@ -115,21 +99,12 @@ class TratamentoDeDados:
         return linha
 
     def _leitura_junto_de(self, historico: list, momento: datetime) -> dict | None:
-        """Devolve a observação mais próxima de um instante, antes ou depois dele, ou None
-        se nem a mais próxima estiver dentro da tolerância. Aqui a leitura seguinte vale
-        tanto quanto a anterior: a API arredonda o horário em baldes de quinze minutos, e
-        a reserva das 14:32 fica entre a leitura das 14:30 e a das 14:45, que descrevem o
-        mesmo tempo. Longe demais, a lacuna é melhor do que o clima de outra hora."""
         marca, linha = min(historico, key=lambda par: abs(par[0] - momento))
         if abs(marca - momento) > timedelta(minutes=self.tolerancia_min):
             return None
         return linha
 
     def _previsoes(self) -> dict:
-        """Lê o CSV de previsão e devolve as horas previstas indexadas por data_hora, ou
-        um dicionário vazio quando o arquivo não existe. É a tabela vigente, reescrita a
-        cada rodada: quem precisa da versão antiga já a tem congelada na linha da
-        reserva."""
         caminho_csv = os.path.join(self.diretorio, ARQUIVO_PREVISAO)
         if not os.path.exists(caminho_csv):
             return {}
@@ -138,11 +113,6 @@ class TratamentoDeDados:
         return {linha["data_hora"]: linha.to_dict() for _, linha in df.iterrows()}
 
     def _congelar_clima_da_reserva(self, df, historico: list) -> int:
-        """Grava nas reservas recém-detectadas o clima que estava fazendo quando a virada
-        de status foi vista, e só nelas: escreve uma vez, quando `reservado_em` já existe
-        e o bloco ainda está vazio, e nunca reescreve. É o tempo que a pessoa tinha na
-        janela ao decidir reservar — a previsão diz o que ela esperava para o jogo, e este
-        bloco, o que ela via. Devolve quantas linhas mudaram."""
         if df.empty or not historico:
             return 0
 
@@ -160,11 +130,6 @@ class TratamentoDeDados:
         return gravadas
 
     def _congelar_previsao(self, df, previsoes: dict) -> int:
-        """Grava nas reservas recém-detectadas a previsão que estava publicada para o
-        horário do jogo, e só nelas: escreve uma vez, quando `reservado_em` já existe e a
-        previsão ainda está vazia, e nunca reescreve. É esse congelamento que responde ao
-        que se sabia do tempo na hora de reservar — a observação de uma hora antes do jogo
-        chega tarde demais para explicar uma reserva feita dois dias antes."""
         if df.empty or not previsoes:
             return 0
 
@@ -191,10 +156,6 @@ class TratamentoDeDados:
         )
 
     def _enriquecer(self, df, leitura: dict | None, agora: datetime) -> int:
-        """Escreve as cinco colunas de clima observado nas linhas do DataFrame que estão
-        na janela, sobrescrevendo o que houver — cada rodada vale mais que a anterior, e a
-        última, a de uma hora antes da reserva, é a que fica. Sem leitura utilizável não
-        escreve nada. Devolve quantas linhas mudaram."""
         if leitura is None:
             return 0
         na_janela = df.apply(
