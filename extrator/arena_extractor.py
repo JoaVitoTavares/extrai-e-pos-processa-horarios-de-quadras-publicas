@@ -133,7 +133,6 @@ def _print_extraction(data: dict, output=None) -> None:
 def _print_summary(
     arena: dict, paths: list[str], enriched_paths: list[str], output=None
 ) -> None:
-    """Imprime quantos arquivos de quadra a arena gravou e quantos receberam clima."""
     output = output or sys.stdout
     print(f"\n>> {arena['nome']}: extração salva/atualizada em {len(paths)} arquivo(s):",
           file=output)
@@ -143,34 +142,31 @@ def _print_summary(
 
 
 def verified_court_names(results: list[dict]) -> list[str]:
-    """Devolve os nomes das quadras que renderam horários, sem repetição e ordenados."""
     return sorted({result["quadra"] for result in results if result["quadra"] and not result["aviso"]})
 
 
 class ArenaExtractor:
     """Executa o pipeline de uma arena: quadras, local, gravação, clima e tratamento.
-    Cada chamada de `run` acumula o próprio log, então a instância pode ser reusada."""
+    Cada chamada de `extract_isolating_failures` acumula o próprio log, então a
+    instância pode ser reusada."""
 
     def __init__(self, arena: dict, visible_browser: bool = False) -> None:
         self.arena = arena
         self.visible_browser = visible_browser
 
-    def run(self) -> tuple[list[str], list[str], str]:
-        """Roda a arena isolando falhas e devolve os paths gravados, as quadras
-        verificadas e o log da rodada, que o chamador imprime quando quiser."""
+    def extract_isolating_failures(self) -> tuple[list[str], list[str], str]:
         output = io.StringIO()
         print("\n" + "#" * 46, file=output)
         print(f"  ARENA: {self.arena['nome']}  ({self.arena['url']})", file=output)
         print("#" * 46, file=output)
         try:
-            paths, court_names = self._execute(output)
+            paths, court_names = self._extract_pipeline(output)
         except (PWTimeout, requests.RequestException, ValueError) as error:
             print(f"[AVISO] arena '{self.arena['nome']}' pulada: {error}", file=sys.stderr)
             paths, court_names = [], []
         return paths, court_names, output.getvalue()
 
-    def _execute(self, output) -> tuple[list[str], list[str]]:
-        """Encadeia as etapas da arena na ordem em que uma depende da anterior."""
+    def _extract_pipeline(self, output) -> tuple[list[str], list[str]]:
         results = collect_courts(self.arena, self.visible_browser, output)
         for data in results:
             _print_extraction(data, output)

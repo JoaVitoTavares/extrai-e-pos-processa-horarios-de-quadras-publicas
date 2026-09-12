@@ -34,7 +34,8 @@ def main() -> None:
     arenas_with_results = 0
     with ThreadPoolExecutor(max_workers=max(1, min(ARENAS_EM_PARALELO, len(arenas)))) as executor:
         arena_by_future = {
-            executor.submit(ArenaExtractor(arena, visible_browser).run): arena for arena in arenas
+            executor.submit(ArenaExtractor(arena, visible_browser).extract_isolating_failures): arena
+            for arena in arenas
         }
         for completed_run in as_completed(arena_by_future):
             paths, verified_courts, run_log = completed_run.result()
