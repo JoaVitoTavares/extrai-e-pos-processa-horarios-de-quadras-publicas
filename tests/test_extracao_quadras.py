@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 import pytest
 
-import courts_collector
+from extrator import courts_collector
 
 DIA = date(2026, 8, 7)
 HORARIOS_ESPERADOS = {
@@ -60,10 +60,6 @@ def test_horarios_de_cada_quadra(quadras_volei, nome):
 
 
 def test_horarios_nao_vazam_entre_quadras(quadras_volei):
-    """Regressão do bug que motivou a refatoração: lendo o texto da página inteira, os
-    26 horários das quatro quadras se misturavam. As areias 1 e 2 têm horários cheios e
-    as areias 3 e 4 têm meias horas — nenhum dos dois conjuntos pode aparecer no bloco
-    do outro."""
     por_quadra = {q["quadra"]: {h["hora"] for h in q["horarios"]} for q in quadras_volei}
 
     assert "17:00" in por_quadra["Areia 1 - Interna"]
@@ -87,9 +83,6 @@ def test_metadados_do_periodo_em_cada_quadra(quadras_volei):
 
 
 def test_data_vem_do_calendario_e_nao_do_relogio(carregar_fixture):
-    """A quadra é carimbada com o dia que está selecionado no calendário: numa rodada que
-    percorre vários dias, usar a data de hoje jogaria os horários de amanhã na linha de
-    hoje — e o histórico passaria a mentir sobre quando o jogo aconteceria."""
     pagina = carregar_fixture("quatro_quadras_volei.html")
     amanha = DIA + timedelta(days=1)
     quadras = courts_collector._extrair_quadras(pagina, "Vôlei de praia", "Noite", amanha)
@@ -98,8 +91,6 @@ def test_data_vem_do_calendario_e_nao_do_relogio(carregar_fixture):
 
 
 def test_raiz_da_quadra_permite_escopar_o_clique(quadras_volei):
-    """Cada quadra leva junto o seu locator, que é o que vai escopar a coleta de preços
-    ao bloco certo em vez de pegar sempre o primeiro horário da página."""
     for quadra in quadras_volei:
         assert quadra["raiz"].count() == 1
 

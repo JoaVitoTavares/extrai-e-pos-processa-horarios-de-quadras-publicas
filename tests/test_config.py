@@ -2,11 +2,11 @@
 
 import pytest
 
-import config
-import courts_collector
-import localizacao
+from extrator import config
+from extrator import courts_collector
+from extrator import localizacao
 import main
-import persistencia
+from extrator import persistencia
 
 
 @pytest.mark.parametrize(
@@ -32,19 +32,13 @@ def test_toda_arena_tem_url():
 
 
 def test_arenas_nao_repetem_o_diretorio():
-    """Duas arenas apontando para o mesmo diretório misturariam os históricos e fariam
-    uma sobrescrever o clima da outra — o mesmo estrago que o arquivo por quadra existe
-    para evitar, um nível acima."""
-    diretorios = [main.preparar_arena(arena)["diretorio"] for arena in config.ARENAS]
+    diretorios = [main.normalize_arena_info(arena)["diretorio"] for arena in config.ARENAS]
     assert len(set(diretorios)) == len(diretorios)
 
 
 def test_toda_arena_procura_algum_tipo_de_quadra():
-    """Arena com catálogo vazio percorreria zero esportes e gravaria zero linhas sem erro
-    nenhum: o diretório dela nasceria com o clima da cidade e nenhuma quadra para casar
-    com ele."""
     for arena in config.ARENAS:
-        assert main.preparar_arena(arena)["tipos"]
+        assert main.normalize_arena_info(arena)["tipos"]
 
 
 def test_janela_do_clima_e_um_intervalo_valido():

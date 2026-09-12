@@ -3,7 +3,7 @@
 import pytest
 import requests
 
-import courts_collector
+from extrator import courts_collector
 from conftest import RespostaFalsa
 
 ARENA = "https://webarena.app/arena/sp-sports"
@@ -19,9 +19,6 @@ ESPORTES = ["Beach Tennis", "Futebol de salão", "Grama 5", "Grama 7", "Handebol
     ],
 )
 def test_api_json_sai_da_url_da_arena(url_arena, esperado):
-    """O endereço da API é derivado da própria arena, e não fixado no config: o caminho é
-    o mesmo em todas — é o mesmo aplicativo Bubble por trás —, mas o domínio não precisa
-    ser, e é isso que permite a lista de sites crescer para fora do webarena.app."""
     assert courts_collector.api_init_de(url_arena) == esperado
 
 
@@ -33,10 +30,6 @@ def test_devolve_a_lista_do_json(respostas):
 
 
 def test_espaco_das_pontas_do_nome_do_esporte_cai(respostas):
-    """O Casarão NH Sports cadastrou " Futebol society" com espaço à esquerda. Sem aparar,
-    o nome não casa com o texto da tela — que vem aparado —, e a arena coletava os horários
-    sem endereço nenhum, portanto sem clima: a variável central do trabalho faltando numa
-    arena inteira, sem erro nenhum no log."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([{"data": {"esportes_list_text": [" Futebol society "]}}])
 
@@ -86,8 +79,6 @@ def test_esportes_alvo_filtra_os_tipos_de_interesse():
 
 
 def test_esportes_alvo_devolve_o_nome_como_o_site_escreve():
-    """O nome volta exatamente como veio da API, porque é ele que o clique procura na
-    tela; a comparação é que ignora acento e caixa."""
     assert courts_collector.esportes_alvo(["Volei de praia", "GRAMA 7"]) == ["Volei de praia", "GRAMA 7"]
 
 
@@ -125,8 +116,6 @@ def test_tipos_ausentes_reconhece_o_nome_sem_acento():
     ],
 )
 def test_esportes_alvo_usa_o_catalogo_da_arena(do_site, tipos, esperado):
-    """Cada arena tem o seu catálogo de quadras, e é ele que decide o que procurar naquele
-    site — sem isso, a arena que só vende futebol society não teria nada a coletar."""
     assert courts_collector.esportes_alvo(do_site, tipos) == esperado
 
 

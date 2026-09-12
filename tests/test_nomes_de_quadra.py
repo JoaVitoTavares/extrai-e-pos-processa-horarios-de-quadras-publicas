@@ -4,8 +4,8 @@ import os
 
 import pytest
 
-import courts_collector
-import persistencia
+from extrator import courts_collector
+from extrator import persistencia
 
 
 @pytest.mark.parametrize(
@@ -46,10 +46,6 @@ def test_caminho_csv_respeita_o_diretorio():
     ],
 )
 def test_quadra_coberta_classifica_pelo_nome(nome, esperado):
-    """Interna ou coberta viram true, externa ou descoberta viram false, e um nome sem
-    palavra-chave fica vazio em vez de afirmar um false que não foi observado. O caso
-    'descoberta' é o que exige testar descoberta antes de coberta, já que uma contém a
-    outra."""
     assert courts_collector._quadra_coberta(nome) == esperado
 
 
@@ -79,7 +75,4 @@ def test_tipo_quadra_canoniza_o_esporte(esporte, nome, esperado):
     ],
 )
 def test_tipo_quadra_grava_a_grafia_do_config(esporte, tipos, esperado):
-    """O que vai ao CSV é como o config escreve o tipo, e não como cada site escreve: sem
-    isso 'Futebol Society' e 'Futebol society' — a mesma quadra em duas arenas — virariam
-    dois tipos no dataset, e Futsal não se juntaria ao futebol de salão."""
     assert courts_collector._tipo_quadra(esporte, None, tipos) == esperado

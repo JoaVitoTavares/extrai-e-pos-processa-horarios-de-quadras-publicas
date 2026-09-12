@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-import courts_collector
+from extrator import courts_collector
 
 DIA = date(2026, 8, 7)
 
@@ -44,9 +44,6 @@ def quadras_com_precos(carregar_fixture):
 
 @pytest.mark.parametrize("indice, esperado", [(0, 150.0), (1, 90.0)])
 def test_preco_vem_da_quadra_escopada(quadras_com_precos, indice, esperado):
-    """Regressão do preço trocado: as duas quadras têm um 17:00 Livre, e buscar o
-    horário na página inteira devolveria sempre o preço da primeira. Escopando a busca
-    ao bloco da quadra, cada uma fica com o seu."""
     quadra = quadras_com_precos[indice]
     horarios = quadra["horarios"]
     courts_collector._coletar_precos(quadra["raiz"], horarios)

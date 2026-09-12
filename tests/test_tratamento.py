@@ -5,9 +5,9 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
-import persistencia
-import weather_collector
-from tratamento import TratamentoDeDados
+from extrator import persistencia
+from extrator import weather_collector
+from extrator.tratamento import TratamentoDeDados
 
 DIA = "2026-08-07"
 COORDENADAS = (-29.9128, -51.1836)
@@ -87,9 +87,6 @@ def reservas(diretorio):
     ],
 )
 def test_janela_de_quatro_horas_ate_uma_hora_antes(extracoes, agora, escreve):
-    """A reserva das 20:00 só recebe clima entre 16:00 e 19:00, com as duas pontas
-    incluídas: antes disso a observação envelheceria até o jogo, depois o registro já
-    entrou na janela morta. A leitura usada é sempre a mais recente disponível."""
     gravar_leitura(dict(ATUAL, time=agora.strftime("%Y-%m-%dT%H:%M")),
                                      str(extracoes), agora)
     TratamentoDeDados(str(extracoes)).aplicar(agora)
@@ -112,8 +109,6 @@ def test_rodada_mais_recente_sobrescreve(extracoes):
 
 
 def test_grava_as_cinco_colunas_com_os_valores_da_leitura(extracoes):
-    """As cinco colunas ambientais saem da leitura campo a campo; a direção do vento e a
-    sensação térmica ficam só no histórico de clima, sem coluna na reserva."""
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 17, 0))
     linha = reservas(extracoes).loc[0]
 
@@ -147,8 +142,6 @@ def test_linha_fora_da_janela_fica_intacta(extracoes):
 
 
 def test_reserva_de_outro_dia_nao_entra_na_janela(extracoes):
-    """A conta usa a data junto com a hora: 20:00 de amanhã não está a três horas de
-    distância só porque o relógio marca 17:00 hoje."""
     persistencia.salvar_extracao(
         [quadra("Areia 2 - Interna", [{"hora": "20:00", "status": "Livre"}], data="2026-08-08")],
         str(extracoes),
@@ -244,9 +237,6 @@ def test_clima_da_reserva_nao_e_reescrito_por_rodada_posterior(extracoes):
 
 
 def test_horario_livre_nao_recebe_o_clima_da_reserva(extracoes):
-    """O bloco é propriedade da reserva, não do horário: enquanto ninguém reservou ele
-    fica vazio, mesmo havendo observação fresca no histórico — vazio aqui quer dizer 'não
-    houve reserva', e não 'não se sabe o tempo daquele momento'."""
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 16, 30))
 
     assert reservas(extracoes).loc[0, "reserva_clima"] == ""

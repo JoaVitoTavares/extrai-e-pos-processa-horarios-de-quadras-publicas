@@ -6,7 +6,7 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
-import persistencia
+from extrator import persistencia
 
 AGORA = datetime(2026, 8, 7, 8, 0, 0)
 DIA = "2026-08-07"
@@ -39,10 +39,6 @@ def test_linha_carrega_a_arena_e_a_cidade():
 
 
 def test_cidade_descoberta_depois_preenche_a_linha_ja_gravada(tmp_path):
-    """Numa arena nova, a primeira rodada insere de uma vez os horários de todos os dias
-    à frente. Se o geocodificador estiver fora do ar nessa hora, a cidade entra vazia — e
-    precisa ser preenchida quando a rodada seguinte a descobrir, senão duas semanas de
-    linhas ficariam sem lugar para sempre."""
     horarios = [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])]
     persistencia.salvar_extracao(horarios, str(tmp_path), AGORA, arena="SP Sports")
     caminho = persistencia.salvar_extracao(
@@ -54,8 +50,6 @@ def test_cidade_descoberta_depois_preenche_a_linha_ja_gravada(tmp_path):
 
 
 def test_rodada_sem_cidade_nao_apaga_a_que_ja_estava(tmp_path):
-    """O contrário também vale: a rodada em que o geocodificador falhou não pode apagar a
-    cidade que a anterior descobriu. Vazio aqui quer dizer 'não sei', e não 'não tem'."""
     horarios = [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])]
     persistencia.salvar_extracao(
         horarios, str(tmp_path), AGORA, arena="SP Sports", cidade="Canoas"
@@ -108,8 +102,6 @@ def test_colunas_da_reserva_ficam_juntas_do_carimbo_da_coleta():
 
 
 def test_mesmo_horario_em_quadras_diferentes_vira_duas_linhas():
-    """Regressão da colisão: a chave de colapso inclui a quadra, então o 17:00 da Areia
-    1 e o da Areia 2 são dois registros distintos, não um sobrescrevendo o outro."""
     resultados = [
         quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre", "valor": 100.0}]),
         quadra("Areia 2 - Interna", [{"hora": "17:00", "status": "Indisponível"}]),
@@ -222,9 +214,6 @@ def test_periodo_do_dia(hora, esperado):
 
 
 def test_primeira_coleta_carimbada_uma_vez_so(tmp_path):
-    """A primeira vez que um slot é visto fica gravada e não é mais reescrita: é ela que
-    diz desde quando aquele horário está sob observação. Sem esse carimbo, um
-    `reservado_em` vazio seria ambíguo entre 'nunca reservado' e 'já chegou reservado'."""
     livre = [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])]
     caminho = persistencia.salvar_extracao(livre, str(tmp_path), AGORA)[0]
     persistencia.salvar_extracao(livre, str(tmp_path), datetime(2026, 8, 7, 12, 0))
@@ -250,9 +239,6 @@ def test_reserva_detectada_quando_o_horario_livre_vira_indisponivel(tmp_path):
 
 
 def test_reserva_de_dias_antes_mantem_a_antecedencia_grande(tmp_path):
-    """A antecedência é contada até o início do jogo, não até o fim do dia da coleta:
-    reservar na quinta um horário de sábado tem que aparecer como dois dias, que é
-    justamente o comportamento que a coleta só do dia atual nunca conseguia ver."""
     sabado = "2026-08-09"
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}], data=sabado)],
@@ -293,10 +279,6 @@ def test_reserva_detectada_nao_e_reescrita_pelas_rodadas_seguintes(tmp_path):
 
 
 def test_cancelamento_apaga_o_que_a_reserva_tinha_deixado(tmp_path):
-    """Voltando a livre, a reserva deixou de existir: as colunas que a descreviam saem
-    junto, inclusive os dois blocos de clima congelados na virada. Manter o carimbo antigo
-    seria afirmar uma reserva que não está mais lá; se o horário for reservado de novo, a
-    próxima virada grava a data nova e o tratamento congela o clima daquele instante."""
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])], str(tmp_path), AGORA
     )
@@ -323,9 +305,6 @@ def test_cancelamento_apaga_o_que_a_reserva_tinha_deixado(tmp_path):
 
 
 def test_slot_de_outro_dia_nao_congela_pelo_relogio_de_hoje(tmp_path):
-    """O congelamento compara o relógio com a data da própria linha: às 08:00 de sexta o
-    horário das 07:00 de sábado ainda está a um dia de distância. Comparando só a hora,
-    todo horário matinal dos dias à frente nasceria congelado e nunca veria a reserva."""
     amanha = "2026-08-08"
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "07:00", "status": "Livre"}], data=amanha)],
@@ -384,9 +363,6 @@ def test_arquivo_existente_e_estendido(tmp_path):
 
 
 def test_coleta_seguinte_preserva_o_clima_ja_gravado(tmp_path):
-    """O upsert só reescreve periodo, horario_fim, status, valor_horario e
-    ultima_atualizacao, então uma coleta posterior de quadra não apaga as colunas
-    ambientais que o tratamento tiver preenchido no mesmo slot."""
     resultados = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Indisponível"}])]
     caminho = persistencia.salvar_extracao(resultados, str(tmp_path), AGORA)[0]
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
@@ -431,9 +407,6 @@ def test_extracao_so_com_aviso_nao_cria_arquivo(tmp_path):
 
 
 def test_verificacao_da_arena_e_atualizada_no_lugar(tmp_path):
-    """O log de verificações é um retrato do agora, e não um histórico: a rodada seguinte
-    reescreve a linha da arena com a hora nova e as quadras que viu. São 96 rodadas por
-    dia; acumulando linha por passagem, o arquivo cresceria mais rápido do que se lê."""
     persistencia.registrar_verificacao("SP Sports", ["Areia 1"], str(tmp_path), AGORA)
     caminho = persistencia.registrar_verificacao(
         "SP Sports", ["Areia 1", "Areia 2"], str(tmp_path), datetime(2026, 8, 7, 8, 15)

@@ -8,9 +8,9 @@ import pandas as pd
 import pytest
 import requests
 
-import config
-import persistencia
-import weather_collector
+from extrator import config
+from extrator import persistencia
+from extrator import weather_collector
 from conftest import RespostaFalsa
 
 AGORA = datetime(2026, 8, 16, 16, 47, 0)
@@ -82,9 +82,6 @@ def test_codigo_desconhecido_ainda_e_gravado_em_bruto():
 
 
 def test_chama_a_api_nas_coordenadas_recebidas(respostas):
-    """A consulta usa a URL do config e as coordenadas que vêm de fora — as da arena que
-    está sendo coletada, e não um ponto fixo —, pede os sete campos atuais, fixa o fuso e
-    não fica pendurada sem timeout."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(PAYLOAD)
     weather_collector.consultar_clima(LATITUDE, LONGITUDE)
@@ -182,8 +179,6 @@ def test_baldes_diferentes_viram_duas_linhas(tmp_path):
 
 
 def test_arquivo_de_clima_nao_casa_com_o_glob_das_quadras():
-    """O sufixo do arquivo de clima é diferente de propósito: o tratamento varre as
-    quadras por padrão de nome, e um clima-extracoes.csv seria tratado como quadra."""
     assert not fnmatch.fnmatch(weather_collector.ARQUIVO_CLIMA, "*" + persistencia.SUFIXO_CSV)
 
 
@@ -198,9 +193,6 @@ def test_coletar_clima_consulta_e_grava(respostas, tmp_path):
 
 
 def test_previsao_pede_as_horas_do_horizonte_da_coleta(respostas):
-    """A previsão cobre os mesmos dias que o coletor de quadras percorre: reserva só é
-    vista nascer dentro dessa janela, e é para ela que existe previsão a congelar. Hoje
-    conta junto com os dias à frente, daí o +1."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa(PAYLOAD_PREVISAO)
     weather_collector.consultar_previsao(LATITUDE, LONGITUDE)

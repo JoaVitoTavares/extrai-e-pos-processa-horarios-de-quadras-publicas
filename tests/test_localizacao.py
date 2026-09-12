@@ -6,9 +6,9 @@ import json
 import pytest
 import requests
 
-import config
-import localizacao
-import persistencia
+from extrator import config
+from extrator import localizacao
+from extrator import persistencia
 from conftest import RespostaFalsa
 
 ENDERECO = "20 de Junho 54, Parobé"
@@ -54,9 +54,6 @@ def test_variacoes_descem_do_especifico_para_o_generico(endereco, esperado):
 
 
 def test_consulta_identifica_a_aplicacao_e_filtra_o_pais(respostas):
-    """O User-Agent é exigência do Nominatim, que recusa chamada anônima; o país entra
-    como filtro porque o site escreve rua e cidade, sem nada que situe o endereço no
-    mundo. E a chamada não fica pendurada sem timeout."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([ACHADO])
     localizacao.consultar_geocodificacao(ENDERECO)
@@ -101,8 +98,6 @@ def test_endereco_que_nenhuma_consulta_resolve_devolve_none(respostas):
 
 
 def test_resposta_sem_coordenada_falha_alto(respostas):
-    """JSON fora do formato levanta ValueError, como nos outros coletores: um campo que o
-    serviço renomeie precisa aparecer como erro, e não virar arena sem clima em silêncio."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([{"display_name": "sem lat nem lon"}])
 
@@ -130,9 +125,6 @@ def test_resolver_grava_o_local_no_diretorio_da_arena(respostas, tmp_path):
 
 
 def test_endereco_ja_conhecido_nao_consulta_de_novo(respostas, tmp_path):
-    """Rodada a rodada o endereço é o mesmo, e o serviço é público, gratuito e limitado a
-    uma consulta por segundo: reconfirmar o que não mudou quatro vezes por hora seria
-    abusar dele por nada."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([ACHADO])
     localizacao.resolver_local(ENDERECO, str(tmp_path))
@@ -143,9 +135,6 @@ def test_endereco_ja_conhecido_nao_consulta_de_novo(respostas, tmp_path):
 
 
 def test_rodada_sem_endereco_legivel_fica_com_o_local_conhecido(respostas, tmp_path):
-    """A leitura do endereço pode falhar numa rodada — o bloco não pintou a tempo —, e
-    isso não pode custar o clima: vale o local que já estava gravado, porque a arena não
-    mudou de lugar só porque a página não abriu."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([ACHADO])
     localizacao.resolver_local(ENDERECO, str(tmp_path))
@@ -156,9 +145,6 @@ def test_rodada_sem_endereco_legivel_fica_com_o_local_conhecido(respostas, tmp_p
 
 
 def test_endereco_novo_que_o_mapa_recusa_nao_herda_o_antigo(respostas, tmp_path):
-    """Endereço diferente do gravado é arena que mudou de lugar. Se o novo não resolve, a
-    rodada fica sem clima em vez de usar as coordenadas do endereço velho, que descrevem
-    outro ponto do mapa — e a rodada seguinte tenta de novo."""
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([ACHADO])
     localizacao.resolver_local(ENDERECO, str(tmp_path))
@@ -192,6 +178,4 @@ def test_local_corrompido_conta_como_cache_vazio(respostas, tmp_path):
 
 
 def test_arquivo_do_local_nao_casa_com_o_glob_das_quadras():
-    """local.json divide o diretório com os CSVs de quadra e não pode ser varrido junto
-    com eles, pelo mesmo motivo dos arquivos de clima."""
     assert not fnmatch.fnmatch(localizacao.ARQUIVO_LOCAL, "*" + persistencia.SUFIXO_CSV)

@@ -3,7 +3,7 @@
 import pytest
 from playwright.sync_api import TimeoutError as PWTimeout
 
-import courts_collector
+from extrator import courts_collector
 
 ESPERA_CURTA_MS = 2_000
 
@@ -13,9 +13,6 @@ def _texto(pagina) -> str:
 
 
 def test_periodo_ja_escolhido_e_aceito_sem_troca_de_conteudo(carregar_fixture):
-    """A página abre com um período já escolhido, e clicar nele não muda texto nenhum.
-    Enquanto a troca de conteúdo era a única confirmação, a arena que só vende naquele
-    período saía da coleta inteira — com os horários na tela o tempo todo."""
     pagina = carregar_fixture("periodos.html")
 
     lido = courts_collector._selecionar_periodo(pagina, "Noite", _texto(pagina), ESPERA_CURTA_MS)
@@ -33,9 +30,6 @@ def test_periodo_sem_horario_a_venda_troca_o_realce(carregar_fixture):
 
 
 def test_conteudo_que_nao_troca_deixa_o_periodo_de_fora(carregar_fixture):
-    """Realce trocado e tela igual à de antes é ambíguo: ou o período está vazio, ou o
-    conteúdo do anterior ainda está lá. Vale mais pular o período do que gravar nele os
-    horários do vizinho, e por isso a espera continua estourando (PWTimeout)."""
     pagina = carregar_fixture("periodos.html")
     courts_collector._selecionar_periodo(pagina, "Manhã", _texto(pagina), ESPERA_CURTA_MS)
     texto_da_manha = _texto(pagina)
