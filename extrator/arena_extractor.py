@@ -7,7 +7,7 @@ import requests
 from playwright.sync_api import TimeoutError as PWTimeout
 
 from extrator.courts_collector import (
-    coletar_horarios, esportes_alvo, listar_esportes, tipos_ausentes
+    collect_schedules, filter_target_sports, list_sports, missing_court_types
 )
 from extrator.localizacao import endereco_observado, resolver_local
 from extrator.persistencia import salvar_extracao
@@ -63,12 +63,12 @@ class ArenaExtractor:
 
     def _collect_courts(self) -> list[dict]:
         print(">> TÉCNICA 1 (API JSON, sem navegador): listando esportes...\n", file=self.output)
-        sports = listar_esportes(self.arena["url"])
+        sports = list_sports(self.arena["url"])
         for position, sport in enumerate(sports, 1):
             print(f"   {position}. {sport}", file=self.output)
 
-        target_sports = esportes_alvo(sports, self.arena["tipos"])
-        missing_types = tipos_ausentes(target_sports, self.arena["tipos"])
+        target_sports = filter_target_sports(sports, self.arena["tipos"])
+        missing_types = missing_court_types(target_sports, self.arena["tipos"])
         if missing_types:
             print(f"\n[AVISO] tipos de quadra não encontrados no site: {', '.join(missing_types)}",
                   file=self.output)
@@ -79,12 +79,12 @@ class ArenaExtractor:
                   file=self.output)
             try:
                 results.extend(
-                    coletar_horarios(
+                    collect_schedules(
                         sport,
                         self.arena["url"],
-                        periodo=None,
+                        period=None,
                         headless=not self.visible_browser,
-                        tipos=self.arena["tipos"],
+                        types=self.arena["tipos"],
                     )
                 )
             except PWTimeout as error:

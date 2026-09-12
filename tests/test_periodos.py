@@ -15,7 +15,7 @@ def _texto(pagina) -> str:
 def test_periodo_ja_escolhido_e_aceito_sem_troca_de_conteudo(carregar_fixture):
     pagina = carregar_fixture("periodos.html")
 
-    lido = courts_collector._selecionar_periodo(pagina, "Noite", _texto(pagina), ESPERA_CURTA_MS)
+    lido = courts_collector._select_period(pagina, "Noite", _texto(pagina), ESPERA_CURTA_MS)
 
     assert "19:00 - Indisponível" in lido
 
@@ -23,24 +23,24 @@ def test_periodo_ja_escolhido_e_aceito_sem_troca_de_conteudo(carregar_fixture):
 def test_periodo_sem_horario_a_venda_troca_o_realce(carregar_fixture):
     pagina = carregar_fixture("periodos.html")
 
-    courts_collector._selecionar_periodo(pagina, "Manhã", _texto(pagina), ESPERA_CURTA_MS)
+    courts_collector._select_period(pagina, "Manhã", _texto(pagina), ESPERA_CURTA_MS)
 
-    assert courts_collector._periodo_escolhido(pagina, "Manhã")
-    assert not courts_collector._periodo_escolhido(pagina, "Noite")
+    assert courts_collector._period_selected(pagina, "Manhã")
+    assert not courts_collector._period_selected(pagina, "Noite")
 
 
 def test_conteudo_que_nao_troca_deixa_o_periodo_de_fora(carregar_fixture):
     pagina = carregar_fixture("periodos.html")
-    courts_collector._selecionar_periodo(pagina, "Manhã", _texto(pagina), ESPERA_CURTA_MS)
+    courts_collector._select_period(pagina, "Manhã", _texto(pagina), ESPERA_CURTA_MS)
     texto_da_manha = _texto(pagina)
 
     with pytest.raises(PWTimeout):
-        courts_collector._selecionar_periodo(pagina, "Tarde", texto_da_manha, ESPERA_CURTA_MS)
+        courts_collector._select_period(pagina, "Tarde", texto_da_manha, ESPERA_CURTA_MS)
 
 
 def test_periodo_realcado_e_o_que_o_site_esta_mostrando(carregar_fixture):
     pagina = carregar_fixture("periodos.html")
 
-    assert courts_collector._periodo_escolhido(pagina, "Noite")
-    assert not courts_collector._periodo_escolhido(pagina, "Manhã")
-    assert not courts_collector._periodo_escolhido(pagina, "Tarde")
+    assert courts_collector._period_selected(pagina, "Noite")
+    assert not courts_collector._period_selected(pagina, "Manhã")
+    assert not courts_collector._period_selected(pagina, "Tarde")

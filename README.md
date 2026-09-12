@@ -694,8 +694,8 @@ arena —, a saída existe: basta chamar à mão, que aí ela vai para o termina
 - **Alertar**: notificar quando um horário mudar de "Indisponível" para "Livre" — a
   virada já é detectada na gravação, falta o aviso
 - Parametrizar arena/esporte/período/data via argumentos de linha de comando
-  (a função `coletar_horarios` já aceita `esporte`, `url_arena`, `periodo` e
-  `dias_a_frente` e `tipos`; o `main.py` percorre todas as arenas e o catálogo de cada
+  (a função `collect_schedules` já aceita `sport`, `arena_url`, `period` e
+  `days_ahead` e `types`; o `main.py` percorre todas as arenas e o catálogo de cada
   uma, mas não aceita recorte pela linha de comando)
 - Preencher `feriado`, `evento_grande` e `jogo_em_porto_alegre`, as três colunas de
   contexto que existem no CSV e ainda nascem vazias — agora que a coluna `cidade` diz a

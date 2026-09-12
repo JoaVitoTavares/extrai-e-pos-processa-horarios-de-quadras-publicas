@@ -24,15 +24,15 @@ ARENA = config.ARENAS[0]["url"]
 
 @pytest.fixture(scope="module")
 def esportes_do_site():
-    return courts_collector.listar_esportes(ARENA)
+    return courts_collector.list_sports(ARENA)
 
 
 @pytest.fixture(scope="module")
 def endereco_do_site(navegador):
     pagina = navegador.new_page()
     pagina.goto(ARENA, wait_until="networkidle", timeout=60_000)
-    courts_collector._escolher_esporte(pagina, ESPORTE, timeout_ms=15_000)
-    endereco = courts_collector.extrair_endereco(pagina, ESPORTE, timeout_ms=15_000)
+    courts_collector._choose_sport(pagina, ESPORTE, timeout_ms=15_000)
+    endereco = courts_collector.extract_address(pagina, ESPORTE, timeout_ms=15_000)
     pagina.close()
     return endereco
 
@@ -41,19 +41,19 @@ def endereco_do_site(navegador):
 def pagina_no_periodo(navegador):
     pagina = navegador.new_page()
     pagina.goto(ARENA, wait_until="networkidle", timeout=60_000)
-    courts_collector._escolher_esporte(pagina, ESPORTE, timeout_ms=15_000)
-    courts_collector._selecionar_dia(pagina, HOJE, timeout_ms=15_000)
-    courts_collector._selecionar_periodo(
+    courts_collector._choose_sport(pagina, ESPORTE, timeout_ms=15_000)
+    courts_collector._select_day(pagina, HOJE, timeout_ms=15_000)
+    courts_collector._select_period(
         pagina, PERIODO, pagina.locator("body").inner_text(), timeout_ms=TIMEOUT_PERIODO_MS
     )
-    courts_collector._esperar_quadras(pagina)
+    courts_collector._wait_for_courts(pagina)
     yield pagina
     pagina.close()
 
 
 @pytest.fixture(scope="module")
 def quadras_do_site(pagina_no_periodo):
-    return courts_collector._extrair_quadras(pagina_no_periodo, ESPORTE, PERIODO, HOJE)
+    return courts_collector._extract_courts(pagina_no_periodo, ESPORTE, PERIODO, HOJE)
 
 
 def test_api_ainda_lista_esportes(esportes_do_site):
@@ -63,11 +63,11 @@ def test_api_ainda_lista_esportes(esportes_do_site):
 @pytest.mark.parametrize("configurada", config.ARENAS, ids=lambda arena: arena["url"])
 def test_toda_arena_ainda_oferece_os_tipos_que_declara(configurada):
     arena = main.normalize_arena_info(configurada)
-    alvos = courts_collector.esportes_alvo(
-        courts_collector.listar_esportes(arena["url"]), arena["tipos"]
+    alvos = courts_collector.filter_target_sports(
+        courts_collector.list_sports(arena["url"]), arena["tipos"]
     )
 
-    assert courts_collector.tipos_ausentes(alvos, arena["tipos"]) == []
+    assert courts_collector.missing_court_types(alvos, arena["tipos"]) == []
 
 
 def test_a_arena_ainda_publica_o_endereco(endereco_do_site):
@@ -81,8 +81,8 @@ def test_endereco_nao_e_o_rotulo_da_tela(endereco_do_site):
 
 def test_calendario_ainda_libera_os_dias_a_frente(pagina_no_periodo):
     na_grade = 0
-    for dia in courts_collector.dias_de_coleta(HOJE):
-        rotulo = dia.strftime(courts_collector.FORMATO_DIA_NO_CALENDARIO)
+    for dia in courts_collector.collection_days(HOJE):
+        rotulo = dia.strftime(courts_collector.CALENDAR_DAY_FORMAT)
         if not pagina_no_periodo.locator(f".picker__day[aria-label^='{rotulo}']").count():
             continue
         seletor = f".picker__day[aria-label^='{rotulo}']:not(.picker__day--disabled)"
@@ -98,13 +98,13 @@ def test_dia_selecionado_e_reconhecivel(pagina_no_periodo):
 
     assert selecionado.count() == 1
     assert selecionado.first.get_attribute("aria-label").startswith(
-        HOJE.strftime(courts_collector.FORMATO_DIA_NO_CALENDARIO)
+        HOJE.strftime(courts_collector.CALENDAR_DAY_FORMAT)
     )
 
 
 def test_periodo_escolhido_continua_realcado(pagina_no_periodo):
-    assert courts_collector._periodo_escolhido(pagina_no_periodo, PERIODO)
-    assert not courts_collector._periodo_escolhido(pagina_no_periodo, "Manhã")
+    assert courts_collector._period_selected(pagina_no_periodo, PERIODO)
+    assert not courts_collector._period_selected(pagina_no_periodo, "Manhã")
 
 
 def test_seletor_ainda_encontra_quadras(quadras_do_site):
@@ -126,7 +126,7 @@ def test_pagina_ja_estabilizou_quando_a_extracao_roda(pagina_no_periodo, quadras
     pagina_no_periodo.wait_for_timeout(1_500)
     depois = [
         len(quadra["horarios"])
-        for quadra in courts_collector._extrair_quadras(pagina_no_periodo, ESPORTE, PERIODO, HOJE)
+        for quadra in courts_collector._extract_courts(pagina_no_periodo, ESPORTE, PERIODO, HOJE)
     ]
 
     assert antes == depois

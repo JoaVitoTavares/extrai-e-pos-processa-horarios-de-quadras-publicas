@@ -46,7 +46,7 @@ def test_caminho_csv_respeita_o_diretorio():
     ],
 )
 def test_quadra_coberta_classifica_pelo_nome(nome, esperado):
-    assert courts_collector._quadra_coberta(nome) == esperado
+    assert courts_collector._covered_court(nome) == esperado
 
 
 @pytest.mark.parametrize(
@@ -62,7 +62,7 @@ def test_quadra_coberta_classifica_pelo_nome(nome, esperado):
     ],
 )
 def test_tipo_quadra_canoniza_o_esporte(esporte, nome, esperado):
-    assert courts_collector._tipo_quadra(esporte, nome) == esperado
+    assert courts_collector._court_type(esporte, nome) == esperado
 
 
 @pytest.mark.parametrize(
@@ -75,4 +75,4 @@ def test_tipo_quadra_canoniza_o_esporte(esporte, nome, esperado):
     ],
 )
 def test_tipo_quadra_grava_a_grafia_do_config(esporte, tipos, esperado):
-    assert courts_collector._tipo_quadra(esporte, None, tipos) == esperado
+    assert courts_collector._court_type(esporte, None, tipos) == esperado

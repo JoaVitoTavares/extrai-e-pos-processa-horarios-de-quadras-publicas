@@ -32,7 +32,7 @@ HORARIOS_ESPERADOS = {
 @pytest.fixture
 def quadras_volei(carregar_fixture):
     pagina = carregar_fixture("quatro_quadras_volei.html")
-    return courts_collector._extrair_quadras(pagina, "Vôlei de praia", "Noite", DIA)
+    return courts_collector._extract_courts(pagina, "Vôlei de praia", "Noite", DIA)
 
 
 def test_uma_entrada_por_quadra(quadras_volei):
@@ -85,7 +85,7 @@ def test_metadados_do_periodo_em_cada_quadra(quadras_volei):
 def test_data_vem_do_calendario_e_nao_do_relogio(carregar_fixture):
     pagina = carregar_fixture("quatro_quadras_volei.html")
     amanha = DIA + timedelta(days=1)
-    quadras = courts_collector._extrair_quadras(pagina, "Vôlei de praia", "Noite", amanha)
+    quadras = courts_collector._extract_courts(pagina, "Vôlei de praia", "Noite", amanha)
 
     assert {quadra["data"] for quadra in quadras} == {"2026-08-08"}
 
@@ -97,7 +97,7 @@ def test_raiz_da_quadra_permite_escopar_o_clique(quadras_volei):
 
 def test_quadra_unica_continua_funcionando(carregar_fixture):
     pagina = carregar_fixture("quadra_unica_grama7.html")
-    quadras = courts_collector._extrair_quadras(pagina, "Grama 7", "Noite", DIA)
+    quadras = courts_collector._extract_courts(pagina, "Grama 7", "Noite", DIA)
 
     assert len(quadras) == 1
     assert quadras[0]["quadra"] == "GRAMA 7 - EXTERNA"
@@ -109,7 +109,7 @@ def test_quadra_unica_continua_funcionando(carregar_fixture):
 
 def test_pagina_sem_quadras_devolve_aviso(pagina):
     pagina.set_content("<div></div>")
-    quadras = courts_collector._extrair_quadras(pagina, "Futebol de salão", "Manhã", DIA)
+    quadras = courts_collector._extract_courts(pagina, "Futebol de salão", "Manhã", DIA)
 
     assert len(quadras) == 1
     assert quadras[0]["quadra"] is None

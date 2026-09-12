@@ -19,27 +19,27 @@ ESPORTES = ["Beach Tennis", "Futebol de salão", "Grama 5", "Grama 7", "Handebol
     ],
 )
 def test_api_json_sai_da_url_da_arena(url_arena, esperado):
-    assert courts_collector.api_init_de(url_arena) == esperado
+    assert courts_collector.api_init_url(url_arena) == esperado
 
 
 def test_devolve_a_lista_do_json(respostas):
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([{"data": {"esportes_list_text": ESPORTES}}])
 
-    assert courts_collector.listar_esportes(ARENA) == ESPORTES
+    assert courts_collector.list_sports(ARENA) == ESPORTES
 
 
 def test_espaco_das_pontas_do_nome_do_esporte_cai(respostas):
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([{"data": {"esportes_list_text": [" Futebol society "]}}])
 
-    assert courts_collector.listar_esportes(ARENA) == ["Futebol society"]
+    assert courts_collector.list_sports(ARENA) == ["Futebol society"]
 
 
 def test_chama_a_api_com_a_arena_e_timeout(respostas):
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([{"data": {"esportes_list_text": ESPORTES}}])
-    courts_collector.listar_esportes(ARENA)
+    courts_collector.list_sports(ARENA)
 
     url, kwargs = chamadas[0]
     assert url == "https://webarena.app/api/1.1/init/data"
@@ -52,7 +52,7 @@ def test_propaga_erro_http(respostas):
     get_falso.resposta = RespostaFalsa(None, erro=requests.HTTPError("500"))
 
     with pytest.raises(requests.HTTPError):
-        courts_collector.listar_esportes(ARENA)
+        courts_collector.list_sports(ARENA)
 
 
 @pytest.mark.parametrize(
@@ -69,17 +69,17 @@ def test_json_em_formato_inesperado_falha_explicitamente(respostas, payload):
     get_falso.resposta = RespostaFalsa(payload)
 
     with pytest.raises(ValueError, match="formato inesperado"):
-        courts_collector.listar_esportes(ARENA)
+        courts_collector.list_sports(ARENA)
 
 
 def test_esportes_alvo_filtra_os_tipos_de_interesse():
-    assert courts_collector.esportes_alvo(ESPORTES) == [
+    assert courts_collector.filter_target_sports(ESPORTES) == [
         "Futebol de salão", "Grama 5", "Grama 7", "Vôlei de praia"
     ]
 
 
 def test_esportes_alvo_devolve_o_nome_como_o_site_escreve():
-    assert courts_collector.esportes_alvo(["Volei de praia", "GRAMA 7"]) == ["Volei de praia", "GRAMA 7"]
+    assert courts_collector.filter_target_sports(["Volei de praia", "GRAMA 7"]) == ["Volei de praia", "GRAMA 7"]
 
 
 @pytest.mark.parametrize(
@@ -91,18 +91,18 @@ def test_esportes_alvo_devolve_o_nome_como_o_site_escreve():
     ],
 )
 def test_esportes_alvo_ignora_o_que_nao_interessa(do_site, esperado):
-    assert courts_collector.esportes_alvo(do_site) == esperado
+    assert courts_collector.filter_target_sports(do_site) == esperado
 
 
 def test_tipos_ausentes_lista_o_que_sumiu_do_site():
-    assert courts_collector.tipos_ausentes(courts_collector.TIPOS_QUADRA) == []
-    assert courts_collector.tipos_ausentes(["Grama 5", "Grama 7"]) == [
+    assert courts_collector.missing_court_types(courts_collector.TIPOS_QUADRA) == []
+    assert courts_collector.missing_court_types(["Grama 5", "Grama 7"]) == [
         "Vôlei de praia", "Futebol de salão"
     ]
 
 
 def test_tipos_ausentes_reconhece_o_nome_sem_acento():
-    assert "Vôlei de praia" not in courts_collector.tipos_ausentes(["Volei de praia"])
+    assert "Vôlei de praia" not in courts_collector.missing_court_types(["Volei de praia"])
 
 
 @pytest.mark.parametrize(
@@ -116,9 +116,9 @@ def test_tipos_ausentes_reconhece_o_nome_sem_acento():
     ],
 )
 def test_esportes_alvo_usa_o_catalogo_da_arena(do_site, tipos, esperado):
-    assert courts_collector.esportes_alvo(do_site, tipos) == esperado
+    assert courts_collector.filter_target_sports(do_site, tipos) == esperado
 
 
 def test_tipos_ausentes_pergunta_pelo_catalogo_da_arena():
-    assert courts_collector.tipos_ausentes(["Futebol society"], ["Futebol society"]) == []
-    assert courts_collector.tipos_ausentes([], ["Futebol society"]) == ["Futebol society"]
+    assert courts_collector.missing_court_types(["Futebol society"], ["Futebol society"]) == []
+    assert courts_collector.missing_court_types([], ["Futebol society"]) == ["Futebol society"]

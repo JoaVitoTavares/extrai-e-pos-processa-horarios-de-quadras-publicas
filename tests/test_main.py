@@ -339,16 +339,16 @@ def test_sai_com_erro_quando_nao_grava_nada(monkeypatch):
 
 
 def test_esporte_que_estoura_o_tempo_nao_derruba_os_outros(monkeypatch, capsys):
-    monkeypatch.setattr(arena_extractor, "listar_esportes", lambda url_arena: ["Grama 7", "Grama 5"])
-    monkeypatch.setattr(arena_extractor, "esportes_alvo", lambda esportes, tipos: esportes)
-    monkeypatch.setattr(arena_extractor, "tipos_ausentes", lambda alvos, tipos: [])
+    monkeypatch.setattr(arena_extractor, "list_sports", lambda arena_url: ["Grama 7", "Grama 5"])
+    monkeypatch.setattr(arena_extractor, "filter_target_sports", lambda sports, types: sports)
+    monkeypatch.setattr(arena_extractor, "missing_court_types", lambda targets, types: [])
 
-    def coletar(esporte, url_arena, periodo=None, headless=True, tipos=None):
-        if esporte == "Grama 7":
+    def coletar(sport, arena_url, period=None, headless=True, types=None):
+        if sport == "Grama 7":
             raise PWTimeout("tempo esgotado")
         return [quadra(nome="Grama 5 - Interna")]
 
-    monkeypatch.setattr(arena_extractor, "coletar_horarios", coletar)
+    monkeypatch.setattr(arena_extractor, "collect_schedules", coletar)
     resultados = arena_extractor.ArenaExtractor(main.normalize_arena_info(ARENA))._collect_courts()
 
     assert [q["quadra"] for q in resultados] == ["Grama 5 - Interna"]
@@ -357,13 +357,13 @@ def test_esporte_que_estoura_o_tempo_nao_derruba_os_outros(monkeypatch, capsys):
 
 def test_modo_visivel_desliga_o_headless(monkeypatch):
     recebido = {}
-    monkeypatch.setattr(arena_extractor, "listar_esportes", lambda url_arena: ["Grama 5"])
-    monkeypatch.setattr(arena_extractor, "esportes_alvo", lambda esportes, tipos: esportes)
-    monkeypatch.setattr(arena_extractor, "tipos_ausentes", lambda alvos, tipos: [])
+    monkeypatch.setattr(arena_extractor, "list_sports", lambda arena_url: ["Grama 5"])
+    monkeypatch.setattr(arena_extractor, "filter_target_sports", lambda sports, types: sports)
+    monkeypatch.setattr(arena_extractor, "missing_court_types", lambda targets, types: [])
     monkeypatch.setattr(
-        arena_extractor, "coletar_horarios",
-        lambda esporte, url_arena, periodo=None, headless=True, tipos=None:
-            recebido.update(headless=headless, url=url_arena) or [],
+        arena_extractor, "collect_schedules",
+        lambda sport, arena_url, period=None, headless=True, types=None:
+            recebido.update(headless=headless, url=arena_url) or [],
     )
 
     arena_extractor.ArenaExtractor(
@@ -376,17 +376,17 @@ def test_modo_visivel_desliga_o_headless(monkeypatch):
 
 def test_arena_procura_os_tipos_de_quadra_que_ela_declara(monkeypatch):
     recebido = {}
-    monkeypatch.setattr(arena_extractor, "listar_esportes", lambda url_arena: ["Futebol society"])
+    monkeypatch.setattr(arena_extractor, "list_sports", lambda arena_url: ["Futebol society"])
     monkeypatch.setattr(
-        arena_extractor, "coletar_horarios",
-        lambda esporte, url_arena, periodo=None, headless=True, tipos=None:
-            recebido.update(esporte=esporte, tipos=tipos) or [],
+        arena_extractor, "collect_schedules",
+        lambda sport, arena_url, period=None, headless=True, types=None:
+            recebido.update(sport=sport, types=types) or [],
     )
     arena = dict(OUTRA_ARENA, tipos=["Futebol society"])
 
     arena_extractor.ArenaExtractor(main.normalize_arena_info(arena))._collect_courts()
 
-    assert recebido == {"esporte": "Futebol society", "tipos": ["Futebol society"]}
+    assert recebido == {"sport": "Futebol society", "types": ["Futebol society"]}
 
 
 def test_arena_sem_tipos_proprios_usa_os_padrao():
