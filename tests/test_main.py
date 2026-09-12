@@ -10,11 +10,6 @@ from playwright.sync_api import TimeoutError as PWTimeout
 
 import main
 from extrator import arena_extractor, weather_collector
-from extrator.config import ARENAS, DIRETORIO_EXTRACOES, DIRETORIO_LOGS, ARENAS_EM_PARALELO
-from extrator.localizacao import resolver_local
-from extrator.persistencia import salvar_extracao
-from extrator.weather_collector import coletar_clima, coletar_previsao
-
 ARENA = {"nome": "SP Sports", "url": "https://webarena.app/arena/sp-sports"}
 OUTRA_ARENA = {"nome": "Arena Parobé", "url": "https://webarena.app/arena/parobe"}
 LOCAL = {
