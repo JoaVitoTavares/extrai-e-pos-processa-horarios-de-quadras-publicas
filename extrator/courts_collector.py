@@ -3,6 +3,7 @@
 import re
 import time
 import requests
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from urllib.parse import urljoin
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
@@ -70,29 +71,51 @@ NO_SCHEDULE_WARNING = "Esta arena não aceita marcação de horário pela web."
 EMPTY_PERIOD_WARNING = "Não foi possível coletar os horários deste período."
 
 
-def _covered_court(name: str | None) -> str:
-    if not name:
-        return ""
-    cleaned = sem_acento(name)
-    if UNCOVERED_PATTERN.search(cleaned):
-        return "false"
-    if COVERED_PATTERN.search(cleaned):
-        return "true"
-    return ""
-
-
 def _canonical(sport: str) -> str:
     cleaned = sem_acento(sport).casefold().strip()
     return "futebol de salao" if FUTSAL_PATTERN.search(cleaned) else cleaned
 
 
-def _court_type(sport: str, court_name: str | None, types: list[str] = TIPOS_QUADRA) -> str:
-    for court_type in types:
-        if _canonical(sport) == _canonical(court_type):
-            return court_type
-    if court_name and FUTSAL_PATTERN.search(sem_acento(court_name)):
-        return "Futebol de salão"
-    return sport
+@dataclass(frozen=True)
+class Court:
+    name: str | None
+    sport: str
+    types: list[str]
+
+    @property
+    def court_type(self) -> str:
+        for court_type in self.types:
+            if _canonical(self.sport) == _canonical(court_type):
+                return court_type
+        if self.name and FUTSAL_PATTERN.search(sem_acento(self.name)):
+            return "Futebol de salão"
+        return self.sport
+
+    @property
+    def covered(self) -> str:
+        if not self.name:
+            return ""
+        cleaned = sem_acento(self.name)
+        if UNCOVERED_PATTERN.search(cleaned):
+            return "false"
+        if COVERED_PATTERN.search(cleaned):
+            return "true"
+        return ""
+
+    def record(
+        self, period: str, day: date, schedules: list[dict], warning: str | None
+    ) -> dict:
+        return {
+            "coletado_em": datetime.now().isoformat(timespec="seconds"),
+            "data": day.isoformat(),
+            "esporte": self.sport,
+            "periodo": period,
+            "quadra": self.name,
+            "tipo_quadra": self.court_type,
+            "quadra_coberta": self.covered,
+            "aviso": warning,
+            "horarios": schedules,
+        }
 
 
 def api_init_url(arena_url: str) -> str:
@@ -244,22 +267,6 @@ def _wait_for_courts(page, timeout_ms: int = 5_000, interval_ms: int = 250) -> N
         page.wait_for_timeout(interval_ms)
 
 
-def _court_without_schedules(
-    sport: str, period: str, day: date, warning: str, types: list[str] = TIPOS_QUADRA
-) -> dict:
-    return {
-        "coletado_em": datetime.now().isoformat(timespec="seconds"),
-        "data": day.isoformat(),
-        "esporte": sport,
-        "periodo": period,
-        "quadra": None,
-        "tipo_quadra": _court_type(sport, None, types),
-        "quadra_coberta": "",
-        "aviso": warning,
-        "horarios": [],
-    }
-
-
 def _extract_courts(
     page, sport: str, period: str, day: date, types: list[str] = TIPOS_QUADRA
 ) -> list[dict]:
@@ -267,24 +274,15 @@ def _extract_courts(
     for root in page.locator(COURTS_SELECTOR).all():
         text = root.inner_text()
         name = text.strip().splitlines()[0].strip()
-        courts.append({
-            "coletado_em": datetime.now().isoformat(timespec="seconds"),
-            "data": day.isoformat(),
-            "esporte": sport,
-            "periodo": period,
-            "quadra": name,
-            "tipo_quadra": _court_type(sport, name, types),
-            "quadra_coberta": _covered_court(name),
-            "aviso": None,
-            "horarios": [
-                {"hora": hour, "status": status.capitalize()}
-                for hour, status in SCHEDULE_PATTERN.findall(text)
-            ],
-            "raiz": root,
-        })
+        schedules = [
+            {"hora": hour, "status": status.capitalize()}
+            for hour, status in SCHEDULE_PATTERN.findall(text)
+        ]
+        record = Court(name, sport, types).record(period, day, schedules, None)
+        courts.append(dict(record, raiz=root))
     if courts:
         return courts
-    empty = _court_without_schedules(sport, period, day, EMPTY_PERIOD_WARNING, types)
+    empty = Court(None, sport, types).record(period, day, [], EMPTY_PERIOD_WARNING)
     return [dict(empty, raiz=None)]
 
 
@@ -377,8 +375,8 @@ def collect_schedules(
         if not _choose_sport(page, sport):
             browser.close()
             return [
-                _court_without_schedules(
-                    sport, periods[0], date.today(), NO_SCHEDULE_WARNING, types
+                Court(None, sport, types).record(
+                    periods[0], date.today(), [], NO_SCHEDULE_WARNING
                 )
             ]
         address = extract_address(page, sport)
