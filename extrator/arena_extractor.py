@@ -31,7 +31,24 @@ class ArenaExtractor:
         self.output = io.StringIO()
         self._print_arena_header()
         try:
-            paths, court_names = self._extract_pipeline()
+            results = self._collect_courts()
+            for data in results:
+                self._print_extraction(data)
+
+            location = self._record_location(results)
+            paths = salvar_extracao(
+                results,
+                self.arena["diretorio"],
+                arena=self.arena["nome"],
+                cidade=(location or {}).get("cidade", ""),
+            )
+            if location:
+                record_weather(location, self.arena["diretorio"], self.output, self.arena["nome"])
+                record_forecast(location, self.arena["diretorio"], self.output, self.arena["nome"])
+
+            enriched_paths = TratamentoDeDados(self.arena["diretorio"]).aplicar()
+            self._print_summary(paths, enriched_paths)
+            court_names = self.verified_court_names(results)
         except (PWTimeout, requests.RequestException, ValueError) as error:
             print(f"[AVISO] arena '{self.arena['nome']}' pulada: {error}", file=sys.stderr)
             paths, court_names = [], []
@@ -40,26 +57,6 @@ class ArenaExtractor:
     @staticmethod
     def verified_court_names(results: list[dict]) -> list[str]:
         return sorted({result["quadra"] for result in results if result["quadra"] and not result["aviso"]})
-
-    def _extract_pipeline(self) -> tuple[list[str], list[str]]:
-        results = self._collect_courts()
-        for data in results:
-            self._print_extraction(data)
-
-        location = self._record_location(results)
-        paths = salvar_extracao(
-            results,
-            self.arena["diretorio"],
-            arena=self.arena["nome"],
-            cidade=(location or {}).get("cidade", ""),
-        )
-        if location:
-            record_weather(location, self.arena["diretorio"], self.output, self.arena["nome"])
-            record_forecast(location, self.arena["diretorio"], self.output, self.arena["nome"])
-
-        enriched_paths = TratamentoDeDados(self.arena["diretorio"]).aplicar()
-        self._print_summary(paths, enriched_paths)
-        return paths, self.verified_court_names(results)
 
     def _collect_courts(self) -> list[dict]:
         print(">> TÉCNICA 1 (API JSON, sem navegador): listando esportes...\n", file=self.output)
@@ -78,15 +75,14 @@ class ArenaExtractor:
             print(f"\n>> TÉCNICA 2 (Playwright): horários de '{sport}' (todos os períodos)...",
                   file=self.output)
             try:
-                results.extend(
-                    collect_schedules(
-                        sport,
-                        self.arena["url"],
-                        period=None,
-                        headless=not self.visible_browser,
-                        types=self.arena["tipos"],
-                    )
+                sport_results = collect_schedules(
+                    sport,
+                    self.arena["url"],
+                    period=None,
+                    headless=not self.visible_browser,
+                    types=self.arena["tipos"],
                 )
+                results.extend(sport_results)
             except PWTimeout as error:
                 print(f"[AVISO] {self.arena['nome']}: '{sport}' pulado por tempo esgotado: {error}",
                       file=sys.stderr)
