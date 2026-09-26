@@ -53,14 +53,14 @@ CODIGOS_CLIMA = {
 }
 
 
-def descrever_codigo(codigo) -> str:
+def describe_code(codigo) -> str:
     try:
         return CODIGOS_CLIMA[int(codigo)]
     except (KeyError, TypeError, ValueError):
         return ""
 
 
-def consultar_clima(latitude: float, longitude: float, timeout: int = 30) -> dict:
+def fetch_weather(latitude: float, longitude: float, timeout: int = 30) -> dict:
     resposta = requests.get(
         API_CLIMA,
         params={
@@ -79,11 +79,11 @@ def consultar_clima(latitude: float, longitude: float, timeout: int = 30) -> dic
     return atual
 
 
-def _linha_de_clima(atual: dict, agora: datetime, latitude: float, longitude: float) -> dict:
+def _weather_row(atual: dict, agora: datetime, latitude: float, longitude: float) -> dict:
     return {
         "data_hora": atual.get("time", ""),
         "coletado_em": agora.isoformat(timespec="seconds"),
-        "clima": descrever_codigo(atual.get("weather_code")),
+        "clima": describe_code(atual.get("weather_code")),
         "codigo_clima": atual.get("weather_code", ""),
         "temperatura": atual.get("temperature_2m", ""),
         "sensacao_termica": atual.get("apparent_temperature", ""),
@@ -96,7 +96,7 @@ def _linha_de_clima(atual: dict, agora: datetime, latitude: float, longitude: fl
     }
 
 
-def salvar_leitura(
+def save_reading(
     atual: dict,
     latitude: float,
     longitude: float,
@@ -107,20 +107,20 @@ def salvar_leitura(
     if diretorio:
         os.makedirs(diretorio, exist_ok=True)
     caminho_csv = os.path.join(diretorio, ARQUIVO_CLIMA)
-    linha = _linha_de_clima(atual, agora, latitude, longitude)
+    linha = _weather_row(atual, agora, latitude, longitude)
     anexar_linha(caminho_csv, linha, COLUNAS_CLIMA, "data_hora")
     return caminho_csv
 
 
-def coletar_clima(
+def collect_weather(
     latitude: float, longitude: float, diretorio: str = DIRETORIO_EXTRACOES, agora=None
 ) -> str:
-    return salvar_leitura(
-        consultar_clima(latitude, longitude), latitude, longitude, diretorio, agora
+    return save_reading(
+        fetch_weather(latitude, longitude), latitude, longitude, diretorio, agora
     )
 
 
-def consultar_previsao(
+def fetch_forecast(
     latitude: float,
     longitude: float,
     dias_a_frente: int = DIAS_A_FRENTE,
@@ -145,8 +145,8 @@ def consultar_previsao(
     return horas
 
 
-def _linhas_de_previsao(horas: dict, agora: datetime, latitude: float, longitude: float) -> list[dict]:
-    def valor(campo: str, indice: int):
+def _forecast_rows(horas: dict, agora: datetime, latitude: float, longitude: float) -> list[dict]:
+    def value(campo: str, indice: int):
         valores = horas.get(campo) or []
         return valores[indice] if indice < len(valores) else ""
 
@@ -154,13 +154,13 @@ def _linhas_de_previsao(horas: dict, agora: datetime, latitude: float, longitude
         {
             "data_hora": data_hora,
             "coletado_em": agora.isoformat(timespec="seconds"),
-            "clima": descrever_codigo(valor("weather_code", i)),
-            "codigo_clima": valor("weather_code", i),
-            "temperatura": valor("temperature_2m", i),
-            "umidade": valor("relative_humidity_2m", i),
-            "precipitacao": valor("precipitation", i),
-            "probabilidade_chuva": valor("precipitation_probability", i),
-            "velocidade_vento": valor("wind_speed_10m", i),
+            "clima": describe_code(value("weather_code", i)),
+            "codigo_clima": value("weather_code", i),
+            "temperatura": value("temperature_2m", i),
+            "umidade": value("relative_humidity_2m", i),
+            "precipitacao": value("precipitation", i),
+            "probabilidade_chuva": value("precipitation_probability", i),
+            "velocidade_vento": value("wind_speed_10m", i),
             "latitude": latitude,
             "longitude": longitude,
         }
@@ -168,7 +168,7 @@ def _linhas_de_previsao(horas: dict, agora: datetime, latitude: float, longitude
     ]
 
 
-def salvar_previsao(
+def save_forecast(
     horas: dict,
     latitude: float,
     longitude: float,
@@ -179,33 +179,33 @@ def salvar_previsao(
     if diretorio:
         os.makedirs(diretorio, exist_ok=True)
     caminho_csv = os.path.join(diretorio, ARQUIVO_PREVISAO)
-    linhas = _linhas_de_previsao(horas, agora, latitude, longitude)
+    linhas = _forecast_rows(horas, agora, latitude, longitude)
     pd.DataFrame(linhas).reindex(columns=COLUNAS_PREVISAO, fill_value="").to_csv(
         caminho_csv, index=False
     )
     return caminho_csv
 
 
-def coletar_previsao(
+def collect_forecast(
     latitude: float, longitude: float, diretorio: str = DIRETORIO_EXTRACOES, agora=None
 ) -> str:
-    return salvar_previsao(
-        consultar_previsao(latitude, longitude), latitude, longitude, diretorio, agora
+    return save_forecast(
+        fetch_forecast(latitude, longitude), latitude, longitude, diretorio, agora
     )
 
 
 def record_weather(
-    location: dict, directory: str, output=None, arena_name: str = ""
+    location: dict, directory: str, outputFile=None, arena_name: str = ""
 ) -> str | None:
     """Grava as condições atuais do ponto da arena. Falha de rede vira aviso e None."""
-    output = output or sys.stdout
-    print("\n>> CLIMA (API Open-Meteo): condições atuais na arena...", file=output)
+    outputFile = outputFile or sys.stdout
+    print("\n>> CLIMA (API Open-Meteo): condições atuais na arena...", file=outputFile)
     try:
-        path = coletar_clima(location["latitude"], location["longitude"], directory)
+        path = collect_weather(location["latitude"], location["longitude"], directory)
     except (requests.RequestException, ValueError) as error:
         print(f"[AVISO] {arena_name}: clima não coletado: {error}", file=sys.stderr)
         return None
-    print(f"   registrado em {path}", file=output)
+    print(f"   registrado em {path}", file=outputFile)
     return path
 
 
@@ -216,7 +216,7 @@ def record_forecast(
     output = output or sys.stdout
     print("\n>> PREVISÃO (API Open-Meteo): horas à frente na arena...", file=output)
     try:
-        path = coletar_previsao(location["latitude"], location["longitude"], directory)
+        path = collect_forecast(location["latitude"], location["longitude"], directory)
     except (requests.RequestException, ValueError) as error:
         print(f"[AVISO] {arena_name}: previsão não coletada: {error}", file=sys.stderr)
         return None
