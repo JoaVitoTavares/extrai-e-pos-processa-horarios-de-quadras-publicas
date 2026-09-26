@@ -9,12 +9,13 @@ from urllib.parse import urljoin
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 from extrator.config import (
-    CAMINHO_API_INIT,
-    DIAS_A_FRENTE,
-    PERIODOS_PADRAO,
-    TIMEOUT_NAVEGACAO_MS,
-    TIPOS_QUADRA,
+    API_INIT_PATH,
+    DAYS_AHEAD,
+    DEFAULT_PERIODS,
+    NAVIGATION_TIMEOUT_MS,
+    COURT_TYPES,
 )
+from extrator.debug import debug
 from extrator.persistencia import sem_acento
 
 SCHEDULE_PATTERN = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(Livre|Indispon\w+)", re.IGNORECASE)
@@ -119,7 +120,7 @@ class Court:
 
 
 def api_init_url(arena_url: str) -> str:
-    return urljoin(arena_url, CAMINHO_API_INIT)
+    return urljoin(arena_url, API_INIT_PATH)
 
 
 def list_sports(arena_url: str) -> list[str]:
@@ -139,7 +140,7 @@ def list_sports(arena_url: str) -> list[str]:
         ) from error
 
 
-def extract_address(page, sport: str, timeout_ms: int = TIMEOUT_NAVEGACAO_MS) -> str:
+def extract_address(page, sport: str, timeout_ms: int = NAVIGATION_TIMEOUT_MS) -> str:
     try:
         page.locator(DATE_FIELD_SELECTOR).first.wait_for(state="visible", timeout=timeout_ms)
     except PWTimeout:
@@ -147,12 +148,12 @@ def extract_address(page, sport: str, timeout_ms: int = TIMEOUT_NAVEGACAO_MS) ->
     return page.evaluate(ADDRESS_SCRIPT, sport) or ""
 
 
-def filter_target_sports(site_sports: list[str], types: list[str] = TIPOS_QUADRA) -> list[str]:
+def filter_target_sports(site_sports: list[str], types: list[str] = COURT_TYPES) -> list[str]:
     wanted = {_canonical(court_type) for court_type in types}
     return [name for name in site_sports if _canonical(name) in wanted]
 
 
-def missing_court_types(targets: list[str], types: list[str] = TIPOS_QUADRA) -> list[str]:
+def missing_court_types(targets: list[str], types: list[str] = COURT_TYPES) -> list[str]:
     found = {_canonical(target) for target in targets}
     return [court_type for court_type in types if _canonical(court_type) not in found]
 
@@ -171,13 +172,13 @@ def _arena_state(page, sport: str, timeout_ms: int) -> str:
     return state.json_value()
 
 
-def _choose_sport(page, sport: str, timeout_ms: int = TIMEOUT_NAVEGACAO_MS) -> bool:
+def _choose_sport(page, sport: str, timeout_ms: int = NAVIGATION_TIMEOUT_MS) -> bool:
     if _arena_state(page, sport, timeout_ms) == "escolher":
         page.get_by_text(sport, exact=True).locator("visible=true").first.click()
     return _arena_state(page, "", timeout_ms) == "agenda"
 
 
-def collection_days(today: date, days_ahead: int = DIAS_A_FRENTE) -> list[date]:
+def collection_days(today: date, days_ahead: int = DAYS_AHEAD) -> list[date]:
     return [today + timedelta(days=n) for n in range(days_ahead + 1)]
 
 
@@ -217,12 +218,14 @@ def _schedules_on_screen(page, timeout_ms: int = SCHEDULES_WAIT_MS) -> bool:
 
 
 def _select_day(
-    page, day: date, timeout_ms: int = TIMEOUT_NAVEGACAO_MS, attempts: int = 3
+    page, day: date, timeout_ms: int = NAVIGATION_TIMEOUT_MS, attempts: int = 3
 ) -> None:
     label = day.strftime(CALENDAR_DAY_FORMAT)
-    for _ in range(attempts):
+    for attempt in range(1, attempts + 1):
         if _try_day(page, label, timeout_ms) and _schedules_on_screen(page):
+            debug(f"dia {label} fixado na tentativa {attempt}")
             return
+        debug(f"dia {label}: tentativa {attempt} de {attempts} falhou")
     raise PWTimeout(f"o calendário não fixou o dia {label} em {attempts} tentativas")
 
 
@@ -261,14 +264,16 @@ def _wait_for_courts(page, timeout_ms: int = 5_000, interval_ms: int = 250) -> N
             for root in page.locator(COURTS_SELECTOR).all()
         ]
         if counts and all(counts):
+            debug(f"quadras prontas na tela: {len(counts)} bloco(s), horarios {counts}")
             return
         if time.monotonic() >= deadline:
+            debug(f"espera por quadras esgotou {timeout_ms}ms; blocos {counts}")
             return
         page.wait_for_timeout(interval_ms)
 
 
 def _extract_courts(
-    page, sport: str, period: str, day: date, types: list[str] = TIPOS_QUADRA
+    page, sport: str, period: str, day: date, types: list[str] = COURT_TYPES
 ) -> list[dict]:
     courts = []
     for root in page.locator(COURTS_SELECTOR).all():
@@ -342,9 +347,11 @@ def _collect_day(
     previous_text = page.locator("body").inner_text()
     collected = []
     for current_period in periods:
+        debug(f"{day.isoformat()} / {current_period}: selecionando periodo")
         try:
             _select_period(page, current_period, previous_text)
         except PWTimeout:
+            debug(f"{day.isoformat()} / {current_period}: periodo nao respondeu, pulando")
             previous_text = page.locator("body").inner_text()
             continue
         _wait_for_courts(page)
@@ -352,6 +359,9 @@ def _collect_day(
             root = court.pop("raiz")
             if with_price:
                 _collect_prices(root, court["horarios"])
+            debug(f"{day.isoformat()} / {current_period}: quadra '{court['quadra'] or '-'}' "
+                  f"com {len(court['horarios'])} horario(s)"
+                  f"{' aviso=' + court['aviso'] if court['aviso'] else ''}")
             collected.append(court)
         previous_text = page.locator("body").inner_text()
     return collected
@@ -362,17 +372,20 @@ def collect_schedules(
     arena_url: str,
     period: str | None = None,
     headless: bool = True,
-    days_ahead: int = DIAS_A_FRENTE,
-    types: list[str] = TIPOS_QUADRA,
+    days_ahead: int = DAYS_AHEAD,
+    types: list[str] = COURT_TYPES,
 ) -> list[dict]:
-    periods = [period] if period else PERIODOS_PADRAO
+    periods = [period] if period else DEFAULT_PERIODS
 
     with sync_playwright() as p:
+        debug(f"'{sport}': abrindo navegador (headless={headless})")
         browser = p.chromium.launch(headless=headless)
         page = browser.new_page()
 
         page.goto(arena_url, wait_until="networkidle", timeout=60_000)
+        debug(f"'{sport}': pagina carregada, escolhendo esporte")
         if not _choose_sport(page, sport):
+            debug(f"'{sport}': arena sem agenda na web, encerrando")
             browser.close()
             return [
                 Court(None, sport, types).record(
@@ -380,15 +393,20 @@ def collect_schedules(
                 )
             ]
         address = extract_address(page, sport)
+        debug(f"'{sport}': endereco lido: {address or '(vazio)'}")
 
+        days = collection_days(date.today(), days_ahead)
         results = []
-        for index, day in enumerate(collection_days(date.today(), days_ahead)):
+        for index, day in enumerate(days):
+            debug(f"'{sport}': dia {index + 1}/{len(days)} ({day.isoformat()})")
             try:
                 _select_day(page, day)
-            except PWTimeout:
+            except PWTimeout as error:
+                debug(f"'{sport}': dia {day.isoformat()} pulado: {error}")
                 continue
             results.extend(_collect_day(page, sport, day, periods, index == 0, types))
 
+        debug(f"'{sport}': fechando navegador com {len(results)} registro(s)")
         browser.close()
 
     return [dict(court, endereco=address) for court in results]

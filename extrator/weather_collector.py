@@ -6,29 +6,29 @@ import pandas as pd
 import requests
 from datetime import datetime
 
-from extrator.config import API_CLIMA, DIAS_A_FRENTE, DIRETORIO_EXTRACOES, FUSO_HORARIO
+from extrator.config import API_CLIMA, DAYS_AHEAD, DIRETORIO_EXTRACOES, FUSO_HORARIO
 from extrator.persistencia import anexar_linha
 
-CAMPOS_ATUAIS = (
+CURRENT_FIELDS = (
     "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,"
     "weather_code,wind_speed_10m,wind_direction_10m"
 )
-CAMPOS_PREVISAO = (
+FORECAST_FIELDS = (
     "temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,"
     "weather_code,wind_speed_10m"
 )
-ARQUIVO_CLIMA = "clima-leituras.csv"
-ARQUIVO_PREVISAO = "clima-previsoes.csv"
-COLUNAS_CLIMA = [
+WEATHER_FILE = "clima-leituras.csv"
+FORECAST_FILE = "clima-previsoes.csv"
+WEATHER_COLUMNS = [
     "data_hora", "coletado_em", "clima", "codigo_clima", "temperatura",
     "sensacao_termica", "umidade", "precipitacao", "velocidade_vento",
     "direcao_vento", "latitude", "longitude",
 ]
-COLUNAS_PREVISAO = [
+FORECAST_COLUMNS = [
     "data_hora", "coletado_em", "clima", "codigo_clima", "temperatura", "umidade",
     "precipitacao", "probabilidade_chuva", "velocidade_vento", "latitude", "longitude",
 ]
-CODIGOS_CLIMA = {
+WEATHER_CODES = {
     0: "Céu limpo",
     1: "Predomínio de sol",
     2: "Parcialmente nublado",
@@ -55,7 +55,7 @@ CODIGOS_CLIMA = {
 
 def describe_code(codigo) -> str:
     try:
-        return CODIGOS_CLIMA[int(codigo)]
+        return WEATHER_CODES[int(codigo)]
     except (KeyError, TypeError, ValueError):
         return ""
 
@@ -66,7 +66,7 @@ def fetch_weather(latitude: float, longitude: float, timeout: int = 30) -> dict:
         params={
             "latitude": latitude,
             "longitude": longitude,
-            "current": CAMPOS_ATUAIS,
+            "current": CURRENT_FIELDS,
             "timezone": FUSO_HORARIO,
         },
         timeout=timeout,
@@ -106,9 +106,9 @@ def save_reading(
     agora = agora or datetime.now()
     if diretorio:
         os.makedirs(diretorio, exist_ok=True)
-    caminho_csv = os.path.join(diretorio, ARQUIVO_CLIMA)
+    caminho_csv = os.path.join(diretorio, WEATHER_FILE)
     linha = _weather_row(atual, agora, latitude, longitude)
-    anexar_linha(caminho_csv, linha, COLUNAS_CLIMA, "data_hora")
+    anexar_linha(caminho_csv, linha, WEATHER_COLUMNS, "data_hora")
     return caminho_csv
 
 
@@ -123,7 +123,7 @@ def collect_weather(
 def fetch_forecast(
     latitude: float,
     longitude: float,
-    dias_a_frente: int = DIAS_A_FRENTE,
+    dias_a_frente: int = DAYS_AHEAD,
     timeout: int = 30,
 ) -> dict:
     resposta = requests.get(
@@ -131,7 +131,7 @@ def fetch_forecast(
         params={
             "latitude": latitude,
             "longitude": longitude,
-            "hourly": CAMPOS_PREVISAO,
+            "hourly": FORECAST_FIELDS,
             "forecast_days": dias_a_frente + 1,
             "timezone": FUSO_HORARIO,
         },
@@ -178,9 +178,9 @@ def save_forecast(
     agora = agora or datetime.now()
     if diretorio:
         os.makedirs(diretorio, exist_ok=True)
-    caminho_csv = os.path.join(diretorio, ARQUIVO_PREVISAO)
+    caminho_csv = os.path.join(diretorio, FORECAST_FILE)
     linhas = _forecast_rows(horas, agora, latitude, longitude)
-    pd.DataFrame(linhas).reindex(columns=COLUNAS_PREVISAO, fill_value="").to_csv(
+    pd.DataFrame(linhas).reindex(columns=FORECAST_COLUMNS, fill_value="").to_csv(
         caminho_csv, index=False
     )
     return caminho_csv

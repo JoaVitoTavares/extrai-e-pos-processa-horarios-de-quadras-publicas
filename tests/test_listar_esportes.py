@@ -95,7 +95,7 @@ def test_esportes_alvo_ignora_o_que_nao_interessa(do_site, esperado):
 
 
 def test_tipos_ausentes_lista_o_que_sumiu_do_site():
-    assert courts_collector.missing_court_types(courts_collector.TIPOS_QUADRA) == []
+    assert courts_collector.missing_court_types(courts_collector.COURT_TYPES) == []
     assert courts_collector.missing_court_types(["Grama 5", "Grama 7"]) == [
         "Vôlei de praia", "Futebol de salão"
     ]

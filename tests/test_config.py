@@ -12,10 +12,10 @@ from extrator import persistencia
 @pytest.mark.parametrize(
     "modulo, nome",
     [
-        (courts_collector, "CAMINHO_API_INIT"),
-        (courts_collector, "TIPOS_QUADRA"),
-        (courts_collector, "PERIODOS_PADRAO"),
-        (courts_collector, "TIMEOUT_NAVEGACAO_MS"),
+        (courts_collector, "API_INIT_PATH"),
+        (courts_collector, "COURT_TYPES"),
+        (courts_collector, "DEFAULT_PERIODS"),
+        (courts_collector, "NAVIGATION_TIMEOUT_MS"),
         (localizacao, "API_GEOCODIFICACAO"),
         (localizacao, "IDENTIFICACAO_GEOCODIFICACAO"),
         (persistencia, "DIRETORIO_EXTRACOES"),

@@ -18,7 +18,7 @@ from extrator.persistencia import (
     COLUNAS_DO_CLIMA_NA_RESERVA,
     SUFIXO_CSV,
 )
-from extrator.weather_collector import ARQUIVO_CLIMA, ARQUIVO_PREVISAO
+from extrator.weather_collector import WEATHER_FILE, FORECAST_FILE
 
 FORMATO_DATA_HORA = "%Y-%m-%dT%H:%M"
 FORMATO_CARIMBO = "%Y-%m-%dT%H:%M:%S"
@@ -76,7 +76,7 @@ class TratamentoDeDados:
         return alterados
 
     def _historico_de_clima(self) -> list[tuple[datetime, dict]]:
-        caminho_csv = os.path.join(self.diretorio, ARQUIVO_CLIMA)
+        caminho_csv = os.path.join(self.diretorio, WEATHER_FILE)
         if not os.path.exists(caminho_csv):
             return []
 
@@ -105,7 +105,7 @@ class TratamentoDeDados:
         return linha
 
     def _previsoes(self) -> dict:
-        caminho_csv = os.path.join(self.diretorio, ARQUIVO_PREVISAO)
+        caminho_csv = os.path.join(self.diretorio, FORECAST_FILE)
         if not os.path.exists(caminho_csv):
             return {}
 

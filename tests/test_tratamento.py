@@ -34,11 +34,11 @@ PREVISAO = {
 
 
 def gravar_leitura(atual, diretorio, agora):
-    return weather_collector.salvar_leitura(atual, *COORDENADAS, diretorio, agora)
+    return weather_collector.save_reading(atual, *COORDENADAS, diretorio, agora)
 
 
 def gravar_previsao(horas, diretorio, agora):
-    return weather_collector.salvar_previsao(horas, *COORDENADAS, diretorio, agora)
+    return weather_collector.save_forecast(horas, *COORDENADAS, diretorio, agora)
 
 
 def quadra(nome, horarios, data=DIA):
@@ -186,9 +186,9 @@ def test_leitura_futura_e_ignorada(extracoes):
 
 def test_arquivo_de_clima_nao_e_tratado_como_quadra(extracoes):
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 17, 0))
-    df = pd.read_csv(extracoes / weather_collector.ARQUIVO_CLIMA, dtype=str, keep_default_na=False)
+    df = pd.read_csv(extracoes / weather_collector.WEATHER_FILE, dtype=str, keep_default_na=False)
 
-    assert list(df.columns) == weather_collector.COLUNAS_CLIMA
+    assert list(df.columns) == weather_collector.WEATHER_COLUMNS
 
 
 def reservar(diretorio, hora="20:00", quando=datetime(2026, 8, 7, 10, 0), data=DIA):

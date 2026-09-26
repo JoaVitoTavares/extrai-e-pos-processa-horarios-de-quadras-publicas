@@ -8,8 +8,9 @@ from playwright.sync_api import TimeoutError as PWTimeout
 
 from extrator.arena_extractor import ArenaExtractor
 from extrator.config import (
-    ARENAS, ARENAS_EM_PARALELO, DIRETORIO_EXTRACOES, DIRETORIO_LOGS, TIPOS_QUADRA
+    ARENAS, ARENAS_EM_PARALELO, DIRETORIO_EXTRACOES, DIRETORIO_LOGS, COURT_TYPES
 )
+from extrator.debug import debug
 from extrator.persistencia import registrar_verificacao, slug
 
 
@@ -22,7 +23,7 @@ def normalize_arena_info(arena: dict) -> dict:
         "url": arena["url"],
         "diretorio": os.path.join(DIRETORIO_EXTRACOES, arena_slug),
         "coordenadas": arena.get("coordenadas"),
-        "tipos": arena.get("tipos") or TIPOS_QUADRA,
+        "tipos": arena.get("tipos") or COURT_TYPES,
     }
 
 
@@ -32,6 +33,9 @@ def main() -> None:
 
     saved_paths = []
     arenas_with_results = 0
+    pending_arenas = len(arenas)
+    debug(f"rodada iniciada: {pending_arenas} arena(s), "
+          f"{ARENAS_EM_PARALELO} em paralelo, navegador visivel={visible_browser}")
     with ThreadPoolExecutor(max_workers=max(1, min(ARENAS_EM_PARALELO, len(arenas)))) as executor:
         arena_by_future = {}
         for arena in arenas:
@@ -46,6 +50,10 @@ def main() -> None:
             )
             arenas_with_results += bool(paths)
             saved_paths.extend(paths)
+            pending_arenas -= 1
+            debug(f"arena '{arena_by_future[completed_run]['nome']}' concluida: "
+                  f"{len(paths)} arquivo(s), {len(verified_courts)} quadra(s) verificada(s); "
+                  f"faltam {pending_arenas}")
 
     if not saved_paths:
         print("\n[ERRO] nenhuma quadra coletada em nenhuma arena.", file=sys.stderr)

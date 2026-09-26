@@ -531,6 +531,21 @@ python main.py --ver    # abre o navegador pra você ASSISTIR o passo a passo
 Com `--ver` abrem `ARENAS_EM_PARALELO` janelas ao mesmo tempo, uma por arena em coleta.
 Para acompanhar uma só, baixe o valor para 1.
 
+### Logs de depuração
+
+Os prints de `debug()` só aparecem com a variável `EXTRATOR_DEBUG` ligada
+(qualquer valor diferente de vazio ou `0`):
+
+```bash
+EXTRATOR_DEBUG=1 python main.py          # headless, com logs de debug
+EXTRATOR_DEBUG=1 python main.py --ver    # navegador visível, com logs de debug
+```
+
+Os logs saem no **stderr**; para gravar tudo num arquivo, use
+`EXTRATOR_DEBUG=1 python main.py > saida.log 2>&1`. O cron não define a variável,
+então a coleta agendada segue sem debug. Uma execução manual grava em `.extracoes/`
+como qualquer rodada do cron.
+
 ## Testes
 
 ```bash

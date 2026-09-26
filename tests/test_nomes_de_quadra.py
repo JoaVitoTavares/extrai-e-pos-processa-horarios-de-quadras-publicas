@@ -46,7 +46,7 @@ def test_caminho_csv_respeita_o_diretorio():
     ],
 )
 def test_quadra_coberta_classifica_pelo_nome(nome, esperado):
-    quadra = courts_collector.Court(nome, "Vôlei de praia", courts_collector.TIPOS_QUADRA)
+    quadra = courts_collector.Court(nome, "Vôlei de praia", courts_collector.COURT_TYPES)
     assert quadra.covered == esperado
 
 
@@ -63,7 +63,7 @@ def test_quadra_coberta_classifica_pelo_nome(nome, esperado):
     ],
 )
 def test_tipo_quadra_canoniza_o_esporte(esporte, nome, esperado):
-    quadra = courts_collector.Court(nome, esporte, courts_collector.TIPOS_QUADRA)
+    quadra = courts_collector.Court(nome, esporte, courts_collector.COURT_TYPES)
     assert quadra.court_type == esperado
 
 

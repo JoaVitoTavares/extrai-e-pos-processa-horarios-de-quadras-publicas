@@ -144,17 +144,17 @@ ARENAS = [
     },
 ]
 
-CAMINHO_API_INIT = "/api/1.1/init/data"
+API_INIT_PATH = "/api/1.1/init/data"
 API_CLIMA = "https://api.open-meteo.com/v1/forecast"
 API_GEOCODIFICACAO = "https://nominatim.openstreetmap.org/search"
 IDENTIFICACAO_GEOCODIFICACAO = "extrator-quadras-tcc/1.0"
 PAIS_DAS_ARENAS = "br"
 FUSO_HORARIO = "America/Sao_Paulo"
 
-TIPOS_QUADRA = ["Vôlei de praia", "Futebol de salão", "Grama 7", "Grama 5"]
-PERIODOS_PADRAO = ["Manhã", "Tarde", "Noite"]
-TIMEOUT_NAVEGACAO_MS = 30_000
-DIAS_A_FRENTE = 5
+COURT_TYPES = ["Vôlei de praia", "Futebol de salão", "Grama 7", "Grama 5"]
+DEFAULT_PERIODS = ["Manhã", "Tarde", "Noite"]
+NAVIGATION_TIMEOUT_MS = 30_000
+DAYS_AHEAD = 5
 ARENAS_EM_PARALELO = 4
 
 DIRETORIO_EXTRACOES = ".extracoes"
