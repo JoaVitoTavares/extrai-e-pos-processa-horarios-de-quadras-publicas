@@ -334,7 +334,7 @@ quadra: `true` para interna, coberta ou ginásio, `false` para externa ou descob
 
 ### Migrando o histórico que já existe
 
-O dataset coletado antes da lista de arenas está solto na raiz de `.extracoes/`, onde a
+O dataset coletado antes da lista de arenas está solto na raiz de `.extracoes-ate-27-09-2026`, onde a
 coleta não procura mais. **Antes da primeira rodada nova** — que numa máquina com o `cron`
 ligado é a dos próximos quinze minutos —, os arquivos precisam descer para a pasta da
 arena:
@@ -353,10 +353,11 @@ passaram, que estão congelados, vale um preenchimento de uma vez:
 
 ```python
 import glob, pandas as pd
-for caminho in glob.glob(".extracoes/sp-sports/*-extracoes.csv"):
-    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
-    df.loc[df["arena"] == "", ["arena", "cidade"]] = ["SP Sports", "Canoas"]
-    df.to_csv(caminho, index=False)
+
+for caminho in glob.glob(".extracoes-ate-27-09-2026/sp-sports/*-extracoes.csv"):
+        df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+        df.loc[df["arena"] == "", ["arena", "cidade"]] = ["SP Sports", "Canoas"]
+        df.to_csv(caminho, index=False)
 ```
 
 ## Quando a reserva foi feita
@@ -387,7 +388,7 @@ coisa que a coluna nunca faz é chutar: carimbar a hora da coleta seria inventar
 
 Um cancelamento — de `Indisponível` de volta para `Livre` — **apaga** o que a reserva
 deixou: as três colunas que a descrevem e os dois blocos de clima congelados na virada
-(`reserva_*` e `previsao_*`). Manter o carimbo antigo seria afirmar uma reserva que não
+(`reserva_*` e `previsao_para_o_jogo_no_momento_da_reserva_*`). Manter o carimbo antigo seria afirmar uma reserva que não
 existe mais; se o horário for reservado de novo, a próxima virada grava a data nova.
 `primeira_coleta` fica de fora: a observação daquele horário não recomeçou.
 
@@ -445,7 +446,7 @@ perguntas diferentes. Confundi-los é fácil, e a diferença é o ponto:
 | --- | --- | --- |
 | `clima`, `temperatura`, … | O tempo pouco antes do jogo | Rodada a rodada na janela — vale a **última** |
 | `reserva_*` | O tempo na hora em que a pessoa reservou | Uma vez, na virada de status |
-| `previsao_*` | O que se previa para a hora do jogo | Uma vez, na virada de status |
+| `previsao_para_o_jogo_no_momento_da_reserva_*` | O que se previa para a hora do jogo | Uma vez, na virada de status |
 
 Depois das duas coletas, o `tratamento.py` escreve `clima`, `temperatura`, `umidade`,
 `precipitacao` e `velocidade_vento` nas reservas — mas só nas que estão na **janela**:
@@ -479,7 +480,7 @@ foi feita**: detectado o `reservado_em`, o tratamento procura no histórico de o
 a leitura daquele instante e a congela em `reserva_clima`, `reserva_temperatura`,
 `reserva_umidade`, `reserva_precipitacao` e `reserva_velocidade_vento`.
 
-É a variável que faltava para a pergunta do trabalho. `previsao_*` diz o que a pessoa
+É a variável que faltava para a pergunta do trabalho. `previsao_para_o_jogo_no_momento_da_reserva_*` diz o que a pessoa
 **esperava** para a hora do jogo; `reserva_*` diz o que ela estava **vendo pela janela** na
 hora de decidir. Uma tarde de chuva enche a quadra coberta na mesma medida em que esvazia
 a de areia, e isso não aparece na previsão do jogo nem na observação de uma hora antes.
@@ -495,7 +496,7 @@ ninguém reservou, fica vazio — é propriedade da reserva, não do horário.
 
 ### A previsão congelada no ato da reserva
 
-As cinco colunas `previsao_*` espelham exatamente as observadas, e por isso dá para
+As cinco colunas `previsao_para_o_jogo_no_momento_da_reserva_*` espelham exatamente as observadas, e por isso dá para
 comparar as duas ponta a ponta: o que se esperava do tempo contra o que de fato fez. Elas
 seguem a regra inversa da janela — em vez de a última rodada valer, **vale a primeira**.
 
@@ -543,7 +544,7 @@ EXTRATOR_DEBUG=1 python main.py --ver    # navegador visível, com logs de debug
 
 Os logs saem no **stderr**; para gravar tudo num arquivo, use
 `EXTRATOR_DEBUG=1 python main.py > saida.log 2>&1`. O cron não define a variável,
-então a coleta agendada segue sem debug. Uma execução manual grava em `.extracoes/`
+então a coleta agendada segue sem debug. Uma execução manual grava em `.extracoes-ate-27-09-2026`
 como qualquer rodada do cron.
 
 ## Testes
@@ -602,7 +603,7 @@ de clima erra por 3 horas em silêncio.
 
 Duas coisas que uma linha de crontab não faz. A primeira é o `cd`:
 `DIRETORIO_EXTRACOES` é um caminho **relativo**, então uma execução a partir de outro
-diretório criaria um `.extracoes/` paralelo no `$HOME` e partiria o dataset em dois, sem
+diretório criaria um `.extracoes-ate-27-09-2026` paralelo no `$HOME` e partiria o dataset em dois, sem
 avisar. A segunda é o `flock`: a gravação lê o CSV inteiro e reescreve, de modo que duas
 rodadas sobrepostas se sobrescrevem por completo — a que terminar por último apaga os
 slots que a outra acabou de inserir. Rodada que encontra a trava tomada **sai com 0** e
@@ -682,7 +683,7 @@ O `verificacoes.csv` é o log da coleta: **uma linha por arena**, com o instante
 foi verificada pela última vez, quantas quadras foram lidas ali e quais. É um retrato do
 agora, não um histórico — a rodada seguinte reescreve a linha da arena no lugar, e por
 isso o arquivo fica em 29 linhas em vez de crescer 29 por rodada, quase três mil por dia.
-O histórico de quem já esteve lá é o próprio `.extracoes/`. Duas leituras: um
+O histórico de quem já esteve lá é o próprio `.extracoes-ate-27-09-2026`. Duas leituras: um
 `ultima_verificacao` velho enquanto as vizinhas estão frescas é arena que caiu ou que a
 rodada não alcançou dentro do tempo; `quadras_verificadas = 0` é arena que respondeu sem
 entregar quadra — o site pede login, não vende pela web, ou o catálogo do `config` deixou
@@ -692,7 +693,7 @@ O `execucoes.csv` diz se a rodada como um todo terminou — uma linha por rodada
 a rodar. A rodada pulada não deixa linha ali, de propósito: ela sai antes, e o ledger é o
 registro do que foi coletado, não do que o `cron` tentou. Quem registra as puladas é o
 `journald`, com `journalctl -t extrator-quadras -p warning`; subindo, é sinal de que a
-cadência ficou apertada para a duração real. `.logs/` fica fora do Git, como `.extracoes/`.
+cadência ficou apertada para a duração real. `.logs/` fica fora do Git, como `.extracoes-ate-27-09-2026`.
 
 Para ver o relatório completo de uma rodada — os horários um a um, os avisos de cada
 arena —, a saída existe: basta chamar à mão, que aí ela vai para o terminal.

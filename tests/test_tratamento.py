@@ -267,11 +267,11 @@ def test_previsao_congelada_na_reserva_recem_detectada(extracoes):
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 10, 0))
     linha = reservas(extracoes).loc[0]
 
-    assert linha["previsao_clima"] == "Chuva moderada"
-    assert linha["previsao_temperatura"] == "18.9"
-    assert linha["previsao_precipitacao"] == "2.4"
-    assert linha["previsao_umidade"] == "88"
-    assert linha["previsao_velocidade_vento"] == "19.4"
+    assert linha["previsao_para_o_jogo_no_momento_da_reserva_clima"] == "Chuva moderada"
+    assert linha["previsao_para_o_jogo_no_momento_da_reserva_temperatura"] == "18.9"
+    assert linha["previsao_para_o_jogo_no_momento_da_reserva_precipitacao"] == "2.4"
+    assert linha["previsao_para_o_jogo_no_momento_da_reserva_umidade"] == "88"
+    assert linha["previsao_para_o_jogo_no_momento_da_reserva_velocidade_vento"] == "19.4"
 
 
 def test_previsao_nao_e_reescrita_por_rodada_posterior(extracoes):
@@ -284,14 +284,14 @@ def test_previsao_nao_e_reescrita_por_rodada_posterior(extracoes):
     gravar_previsao(revisada, str(extracoes), datetime(2026, 8, 7, 17, 0))
     tratamento.aplicar(datetime(2026, 8, 7, 17, 0))
 
-    assert reservas(extracoes).loc[0, "previsao_clima"] == "Chuva moderada"
+    assert reservas(extracoes).loc[0, "previsao_para_o_jogo_no_momento_da_reserva_clima"] == "Chuva moderada"
 
 
 def test_horario_livre_nao_recebe_previsao(extracoes):
     gravar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 10, 0))
 
-    assert reservas(extracoes).loc[0, "previsao_clima"] == ""
+    assert reservas(extracoes).loc[0, "previsao_para_o_jogo_no_momento_da_reserva_clima"] == ""
 
 
 def test_reserva_de_meia_hora_pega_a_previsao_da_hora_cheia(extracoes):
@@ -304,7 +304,7 @@ def test_reserva_de_meia_hora_pega_a_previsao_da_hora_cheia(extracoes):
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 10, 0))
     df = reservas(extracoes).set_index("horario_inicio")
 
-    assert df.loc["21:30", "previsao_clima"] == "Céu limpo"
+    assert df.loc["21:30", "previsao_para_o_jogo_no_momento_da_reserva_clima"] == "Céu limpo"
 
 
 def test_reserva_fora_do_horizonte_da_previsao_fica_sem_coluna(extracoes):
@@ -317,7 +317,7 @@ def test_reserva_fora_do_horizonte_da_previsao_fica_sem_coluna(extracoes):
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 10, 0))
     df = reservas(extracoes).set_index("data")
 
-    assert df.loc["2026-08-09", "previsao_clima"] == ""
+    assert df.loc["2026-08-09", "previsao_para_o_jogo_no_momento_da_reserva_clima"] == ""
 
 
 def test_sem_previsao_o_clima_observado_continua_sendo_aplicado(extracoes):
@@ -326,7 +326,7 @@ def test_sem_previsao_o_clima_observado_continua_sendo_aplicado(extracoes):
     linha = reservas(extracoes).loc[0]
 
     assert linha["clima"] == "Encoberto"
-    assert linha["previsao_clima"] == ""
+    assert linha["previsao_para_o_jogo_no_momento_da_reserva_clima"] == ""
 
 
 def test_devolve_so_os_arquivos_alterados(extracoes):

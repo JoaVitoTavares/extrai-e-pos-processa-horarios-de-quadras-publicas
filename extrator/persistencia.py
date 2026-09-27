@@ -12,7 +12,9 @@ SUFIXO_CSV = "-extracoes.csv"
 COLUNAS_DO_LOG = ["arena", "ultima_verificacao", "quadras_verificadas", "quadras"]
 COLUNAS_DE_CLIMA = ["clima", "temperatura", "umidade", "precipitacao", "velocidade_vento"]
 COLUNAS_DO_CLIMA_NA_RESERVA = [f"reserva_{coluna}" for coluna in COLUNAS_DE_CLIMA]
-COLUNAS_DA_PREVISAO = [f"previsao_{coluna}" for coluna in COLUNAS_DE_CLIMA]
+COLUNAS_DA_PREVISAO = [
+    f"previsao_para_o_jogo_no_momento_da_reserva_{coluna}" for coluna in COLUNAS_DE_CLIMA
+]
 COLUNAS_CONGELADAS_NA_VIRADA = COLUNAS_DO_CLIMA_NA_RESERVA + COLUNAS_DA_PREVISAO
 COLUNAS_DA_RESERVA = ["reservado_em", "periodo_da_reserva", "antecedencia_horas"]
 COLUNAS_DA_VIRADA = COLUNAS_DA_RESERVA + COLUNAS_CONGELADAS_NA_VIRADA

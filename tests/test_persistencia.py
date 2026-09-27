@@ -84,7 +84,8 @@ def test_os_tres_blocos_de_clima_espelham_as_mesmas_variaveis():
         f"reserva_{coluna}" for coluna in persistencia.COLUNAS_DE_CLIMA
     ]
     assert persistencia.COLUNAS_DA_PREVISAO == [
-        f"previsao_{coluna}" for coluna in persistencia.COLUNAS_DE_CLIMA
+        f"previsao_para_o_jogo_no_momento_da_reserva_{coluna}"
+        for coluna in persistencia.COLUNAS_DE_CLIMA
     ]
     assert colunas[inicio + 5:inicio + 15] == (
         persistencia.COLUNAS_DO_CLIMA_NA_RESERVA + persistencia.COLUNAS_DA_PREVISAO
