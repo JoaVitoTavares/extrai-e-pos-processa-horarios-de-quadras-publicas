@@ -388,7 +388,7 @@ coisa que a coluna nunca faz é chutar: carimbar a hora da coleta seria inventar
 
 Um cancelamento — de `Indisponível` de volta para `Livre` — **apaga** o que a reserva
 deixou: as três colunas que a descrevem e os dois blocos de clima congelados na virada
-(`reserva_*` e `previsao_para_o_jogo_no_momento_da_reserva_*`). Manter o carimbo antigo seria afirmar uma reserva que não
+(`na_hora_da_reserva_*` e `previsao_para_o_jogo_no_momento_da_reserva_*`). Manter o carimbo antigo seria afirmar uma reserva que não
 existe mais; se o horário for reservado de novo, a próxima virada grava a data nova.
 `primeira_coleta` fica de fora: a observação daquele horário não recomeçou.
 
@@ -445,7 +445,7 @@ perguntas diferentes. Confundi-los é fácil, e a diferença é o ponto:
 | Bloco | Que instante descreve | Quando é escrito |
 | --- | --- | --- |
 | `clima`, `temperatura`, … | O tempo pouco antes do jogo | Rodada a rodada na janela — vale a **última** |
-| `reserva_*` | O tempo na hora em que a pessoa reservou | Uma vez, na virada de status |
+| `na_hora_da_reserva_*` | O tempo na hora em que a pessoa reservou | Uma vez, na virada de status |
 | `previsao_para_o_jogo_no_momento_da_reserva_*` | O que se previa para a hora do jogo | Uma vez, na virada de status |
 
 Depois das duas coletas, o `tratamento.py` escreve `clima`, `temperatura`, `umidade`,
@@ -477,11 +477,11 @@ pior do que deixar a lacuna.
 
 A mesma virada de status que data a reserva serve para saber **que tempo fazia quando ela
 foi feita**: detectado o `reservado_em`, o tratamento procura no histórico de observações
-a leitura daquele instante e a congela em `reserva_clima`, `reserva_temperatura`,
-`reserva_umidade`, `reserva_precipitacao` e `reserva_velocidade_vento`.
+a leitura daquele instante e a congela em `na_hora_da_reserva_clima`, `na_hora_da_reserva_temperatura`,
+`na_hora_da_reserva_umidade`, `na_hora_da_reserva_precipitacao` e `na_hora_da_reserva_velocidade_vento`.
 
 É a variável que faltava para a pergunta do trabalho. `previsao_para_o_jogo_no_momento_da_reserva_*` diz o que a pessoa
-**esperava** para a hora do jogo; `reserva_*` diz o que ela estava **vendo pela janela** na
+**esperava** para a hora do jogo; `na_hora_da_reserva_*` diz o que ela estava **vendo pela janela** na
 hora de decidir. Uma tarde de chuva enche a quadra coberta na mesma medida em que esvazia
 a de areia, e isso não aparece na previsão do jogo nem na observação de uma hora antes.
 

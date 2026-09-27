@@ -11,7 +11,7 @@ from extrator.config import ARQUIVO_DE_VERIFICACOES, DIRETORIO_EXTRACOES, DIRETO
 SUFIXO_CSV = "-extracoes.csv"
 COLUNAS_DO_LOG = ["arena", "ultima_verificacao", "quadras_verificadas", "quadras"]
 COLUNAS_DE_CLIMA = ["clima", "temperatura", "umidade", "precipitacao", "velocidade_vento"]
-COLUNAS_DO_CLIMA_NA_RESERVA = [f"reserva_{coluna}" for coluna in COLUNAS_DE_CLIMA]
+COLUNAS_DO_CLIMA_NA_RESERVA = [f"na_hora_da_reserva_{coluna}" for coluna in COLUNAS_DE_CLIMA]
 COLUNAS_DA_PREVISAO = [
     f"previsao_para_o_jogo_no_momento_da_reserva_{coluna}" for coluna in COLUNAS_DE_CLIMA
 ]

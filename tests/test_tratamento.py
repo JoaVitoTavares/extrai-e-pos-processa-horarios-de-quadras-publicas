@@ -209,11 +209,11 @@ def test_clima_do_instante_da_reserva_e_congelado(extracoes):
     linha = reservas(extracoes).loc[0]
 
     assert linha["reservado_em"] == "2026-08-07T10:00:00"
-    assert linha["reserva_clima"] == "Chuva fraca"
-    assert linha["reserva_temperatura"] == "19.8"
-    assert linha["reserva_umidade"] == "76"
-    assert linha["reserva_precipitacao"] == "0.0"
-    assert linha["reserva_velocidade_vento"] == "13.1"
+    assert linha["na_hora_da_reserva_clima"] == "Chuva fraca"
+    assert linha["na_hora_da_reserva_temperatura"] == "19.8"
+    assert linha["na_hora_da_reserva_umidade"] == "76"
+    assert linha["na_hora_da_reserva_precipitacao"] == "0.0"
+    assert linha["na_hora_da_reserva_velocidade_vento"] == "13.1"
 
 
 def test_clima_da_reserva_nao_e_reescrito_por_rodada_posterior(extracoes):
@@ -232,14 +232,14 @@ def test_clima_da_reserva_nao_e_reescrito_por_rodada_posterior(extracoes):
     tratamento.aplicar(datetime(2026, 8, 7, 17, 0))
     linha = reservas(extracoes).loc[0]
 
-    assert linha["reserva_clima"] == "Chuva fraca"
+    assert linha["na_hora_da_reserva_clima"] == "Chuva fraca"
     assert linha["clima"] == "Céu limpo"
 
 
 def test_horario_livre_nao_recebe_o_clima_da_reserva(extracoes):
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 16, 30))
 
-    assert reservas(extracoes).loc[0, "reserva_clima"] == ""
+    assert reservas(extracoes).loc[0, "na_hora_da_reserva_clima"] == ""
 
 
 def test_clima_da_reserva_usa_a_observacao_mais_proxima_da_virada(extracoes):
@@ -251,14 +251,14 @@ def test_clima_da_reserva_usa_a_observacao_mais_proxima_da_virada(extracoes):
     reservar(extracoes, quando=datetime(2026, 8, 7, 10, 40))
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 10, 45))
 
-    assert reservas(extracoes).loc[0, "reserva_clima"] == "Trovoada"
+    assert reservas(extracoes).loc[0, "na_hora_da_reserva_clima"] == "Trovoada"
 
 
 def test_reserva_sem_observacao_por_perto_fica_sem_o_bloco(extracoes):
     reservar(extracoes, quando=datetime(2026, 8, 7, 19, 0))
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 19, 0))
 
-    assert reservas(extracoes).loc[0, "reserva_clima"] == ""
+    assert reservas(extracoes).loc[0, "na_hora_da_reserva_clima"] == ""
 
 
 def test_previsao_congelada_na_reserva_recem_detectada(extracoes):

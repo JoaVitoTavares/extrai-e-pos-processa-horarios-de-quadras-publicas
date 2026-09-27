@@ -81,7 +81,7 @@ def test_os_tres_blocos_de_clima_espelham_as_mesmas_variaveis():
     inicio = colunas.index("clima")
 
     assert persistencia.COLUNAS_DO_CLIMA_NA_RESERVA == [
-        f"reserva_{coluna}" for coluna in persistencia.COLUNAS_DE_CLIMA
+        f"na_hora_da_reserva_{coluna}" for coluna in persistencia.COLUNAS_DE_CLIMA
     ]
     assert persistencia.COLUNAS_DA_PREVISAO == [
         f"previsao_para_o_jogo_no_momento_da_reserva_{coluna}"
