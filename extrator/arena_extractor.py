@@ -6,6 +6,7 @@ import threading
 import requests
 from playwright.sync_api import TimeoutError as PWTimeout
 
+from extrator.config import DAYS_AHEAD
 from extrator.courts_collector import (
     collect_schedules, filter_target_sports, list_sports, missing_court_types
 )
@@ -22,9 +23,17 @@ class ArenaExtractor:
     Cada chamada de `extract_isolating_failures` acumula o próprio log, então a
     instância pode ser reusada em sequência, mas não em paralelo."""
 
-    def __init__(self, arena: dict, visible_browser: bool = False) -> None:
+    def __init__(
+        self,
+        arena: dict,
+        visible_browser: bool = False,
+        days_from: int = 0,
+        days_ahead: int = DAYS_AHEAD,
+    ) -> None:
         self.arena = arena
         self.visible_browser = visible_browser
+        self.days_from = days_from
+        self.days_ahead = days_ahead
         self.output = sys.stdout
 
     def extract_isolating_failures(self) -> tuple[list[str], list[str], str]:
@@ -80,6 +89,8 @@ class ArenaExtractor:
                     self.arena["url"],
                     period=None,
                     headless=not self.visible_browser,
+                    days_ahead=self.days_ahead,
+                    days_from=self.days_from,
                     types=self.arena["tipos"],
                 )
                 results.extend(sport_results)

@@ -27,7 +27,7 @@ LEDGER="$DIRETORIO_LOGS/execucoes.csv"
 [ -f "$LEDGER" ] || echo "instante,codigo,duracao_s" >"$LEDGER"
 
 inicio=$(date +%s)
-timeout --signal=TERM --kill-after=60 "$LIMITE_DE_EXECUCAO" "$RAIZ/.venv/bin/python" main.py
+timeout --signal=TERM --kill-after=60 "$LIMITE_DE_EXECUCAO" "$RAIZ/.venv/bin/python" main.py "$@"
 codigo=$?
 duracao=$(( $(date +%s) - inicio ))
 

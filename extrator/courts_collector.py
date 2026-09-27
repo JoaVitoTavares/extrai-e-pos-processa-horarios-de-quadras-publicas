@@ -178,8 +178,8 @@ def _choose_sport(page, sport: str, timeout_ms: int = NAVIGATION_TIMEOUT_MS) -> 
     return _arena_state(page, "", timeout_ms) == "agenda"
 
 
-def collection_days(today: date, days_ahead: int = DAYS_AHEAD) -> list[date]:
-    return [today + timedelta(days=n) for n in range(days_ahead + 1)]
+def collection_days(today: date, days_ahead: int = DAYS_AHEAD, days_from: int = 0) -> list[date]:
+    return [today + timedelta(days=n) for n in range(days_from, days_ahead + 1)]
 
 
 def _try_day(page, label: str, timeout_ms: int) -> bool:
@@ -373,6 +373,7 @@ def collect_schedules(
     period: str | None = None,
     headless: bool = True,
     days_ahead: int = DAYS_AHEAD,
+    days_from: int = 0,
     types: list[str] = COURT_TYPES,
 ) -> list[dict]:
     periods = [period] if period else DEFAULT_PERIODS
@@ -395,7 +396,8 @@ def collect_schedules(
         address = extract_address(page, sport)
         debug(f"'{sport}': endereco lido: {address or '(vazio)'}")
 
-        days = collection_days(date.today(), days_ahead)
+        today = date.today()
+        days = collection_days(today, days_ahead, days_from)
         results = []
         for index, day in enumerate(days):
             debug(f"'{sport}': dia {index + 1}/{len(days)} ({day.isoformat()})")
@@ -404,7 +406,7 @@ def collect_schedules(
             except PWTimeout as error:
                 debug(f"'{sport}': dia {day.isoformat()} pulado: {error}")
                 continue
-            results.extend(_collect_day(page, sport, day, periods, index == 0, types))
+            results.extend(_collect_day(page, sport, day, periods, day == today, types))
 
         debug(f"'{sport}': fechando navegador com {len(results)} registro(s)")
         browser.close()

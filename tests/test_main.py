@@ -343,7 +343,7 @@ def test_esporte_que_estoura_o_tempo_nao_derruba_os_outros(monkeypatch, capsys):
     monkeypatch.setattr(arena_extractor, "filter_target_sports", lambda sports, types: sports)
     monkeypatch.setattr(arena_extractor, "missing_court_types", lambda targets, types: [])
 
-    def coletar(sport, arena_url, period=None, headless=True, types=None):
+    def coletar(sport, arena_url, period=None, headless=True, types=None, **kwargs):
         if sport == "Grama 7":
             raise PWTimeout("tempo esgotado")
         return [quadra(nome="Grama 5 - Interna")]
@@ -362,7 +362,7 @@ def test_modo_visivel_desliga_o_headless(monkeypatch):
     monkeypatch.setattr(arena_extractor, "missing_court_types", lambda targets, types: [])
     monkeypatch.setattr(
         arena_extractor, "collect_schedules",
-        lambda sport, arena_url, period=None, headless=True, types=None:
+        lambda sport, arena_url, period=None, headless=True, types=None, **kwargs:
             recebido.update(headless=headless, url=arena_url) or [],
     )
 
@@ -379,7 +379,7 @@ def test_arena_procura_os_tipos_de_quadra_que_ela_declara(monkeypatch):
     monkeypatch.setattr(arena_extractor, "list_sports", lambda arena_url: ["Futebol society"])
     monkeypatch.setattr(
         arena_extractor, "collect_schedules",
-        lambda sport, arena_url, period=None, headless=True, types=None:
+        lambda sport, arena_url, period=None, headless=True, types=None, **kwargs:
             recebido.update(sport=sport, types=types) or [],
     )
     arena = dict(OUTRA_ARENA, tipos=["Futebol society"])

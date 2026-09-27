@@ -1,6 +1,7 @@
 """Fixtures compartilhadas pelos testes do coletor."""
 
 import os
+import sys
 
 import pytest
 import requests
@@ -20,6 +21,11 @@ class RespostaFalsa:
 
     def json(self):
         return self.payload
+
+
+@pytest.fixture(autouse=True)
+def argv_sem_os_argumentos_do_pytest(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["main.py"])
 
 
 @pytest.fixture
