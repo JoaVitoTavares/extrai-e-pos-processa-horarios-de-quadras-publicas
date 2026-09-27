@@ -69,17 +69,21 @@ def test_coluna_quadra_coberta_vem_logo_apos_tipo_quadra():
 
 def test_colunas_de_clima_ficam_em_bloco_contiguo():
     colunas = persistencia.COLUNAS_CSV
-    inicio = colunas.index("clima")
+    inicio = colunas.index("antes_do_jogo_clima")
     assert colunas[inicio:inicio + 5] == [
-        "clima", "temperatura", "umidade", "precipitacao", "velocidade_vento"
+        "antes_do_jogo_clima", "antes_do_jogo_temperatura", "antes_do_jogo_umidade",
+        "antes_do_jogo_precipitacao", "antes_do_jogo_velocidade_vento",
     ]
     assert colunas.index("feriado") == inicio + 15
 
 
 def test_os_tres_blocos_de_clima_espelham_as_mesmas_variaveis():
     colunas = persistencia.COLUNAS_CSV
-    inicio = colunas.index("clima")
+    inicio = colunas.index("antes_do_jogo_clima")
 
+    assert persistencia.COLUNAS_DO_CLIMA_ANTES_DO_JOGO == [
+        f"antes_do_jogo_{coluna}" for coluna in persistencia.COLUNAS_DE_CLIMA
+    ]
     assert persistencia.COLUNAS_DO_CLIMA_NA_RESERVA == [
         f"na_hora_da_reserva_{coluna}" for coluna in persistencia.COLUNAS_DE_CLIMA
     ]
@@ -367,7 +371,7 @@ def test_coleta_seguinte_preserva_o_clima_ja_gravado(tmp_path):
     resultados = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Indisponível"}])]
     caminho = persistencia.salvar_extracao(resultados, str(tmp_path), AGORA)[0]
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
-    df.loc[0, ["clima", "temperatura", "umidade", "precipitacao", "velocidade_vento"]] = [
+    df.loc[0, persistencia.COLUNAS_DO_CLIMA_ANTES_DO_JOGO] = [
         "Encoberto", "24.4", "76", "0.0", "13.1"
     ]
     df.to_csv(caminho, index=False)
@@ -377,9 +381,9 @@ def test_coleta_seguinte_preserva_o_clima_ja_gravado(tmp_path):
     df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
 
     assert df.loc[0, "status"] == "Livre"
-    assert df.loc[0, "clima"] == "Encoberto"
-    assert df.loc[0, "umidade"] == "76"
-    assert df.loc[0, "velocidade_vento"] == "13.1"
+    assert df.loc[0, "antes_do_jogo_clima"] == "Encoberto"
+    assert df.loc[0, "antes_do_jogo_umidade"] == "76"
+    assert df.loc[0, "antes_do_jogo_velocidade_vento"] == "13.1"
 
 
 def test_grava_no_diretorio_de_extracoes_por_padrao(tmp_path, monkeypatch):

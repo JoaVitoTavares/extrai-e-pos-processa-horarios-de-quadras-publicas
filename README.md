@@ -444,12 +444,12 @@ perguntas diferentes. Confundi-los é fácil, e a diferença é o ponto:
 
 | Bloco | Que instante descreve | Quando é escrito |
 | --- | --- | --- |
-| `clima`, `temperatura`, … | O tempo pouco antes do jogo | Rodada a rodada na janela — vale a **última** |
+| `antes_do_jogo_clima`, `antes_do_jogo_temperatura`, … | O tempo pouco antes do jogo | Rodada a rodada na janela — vale a **última** |
 | `na_hora_da_reserva_*` | O tempo na hora em que a pessoa reservou | Uma vez, na virada de status |
 | `previsao_para_o_jogo_no_momento_da_reserva_*` | O que se previa para a hora do jogo | Uma vez, na virada de status |
 
-Depois das duas coletas, o `tratamento.py` escreve `clima`, `temperatura`, `umidade`,
-`precipitacao` e `velocidade_vento` nas reservas — mas só nas que estão na **janela**:
+Depois das duas coletas, o `tratamento.py` escreve `antes_do_jogo_clima`, `antes_do_jogo_temperatura`,
+`antes_do_jogo_umidade`, `antes_do_jogo_precipitacao` e `antes_do_jogo_velocidade_vento` nas reservas — mas só nas que estão na **janela**:
 de 4 horas antes até 1 hora antes do horário reservado, com as duas pontas incluídas.
 
 Para uma reserva das 20:00, com coleta a cada 15 minutos:

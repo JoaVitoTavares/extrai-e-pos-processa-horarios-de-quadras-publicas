@@ -15,6 +15,7 @@ from extrator.persistencia import (
     COLUNAS_CSV,
     COLUNAS_DA_PREVISAO,
     COLUNAS_DE_CLIMA,
+    COLUNAS_DO_CLIMA_ANTES_DO_JOGO,
     COLUNAS_DO_CLIMA_NA_RESERVA,
     SUFIXO_CSV,
 )
@@ -164,5 +165,7 @@ class TratamentoDeDados:
         )
         if df.empty or not na_janela.any():
             return 0
-        df.loc[na_janela, COLUNAS_DE_CLIMA] = [leitura[coluna] for coluna in COLUNAS_DE_CLIMA]
+        df.loc[na_janela, COLUNAS_DO_CLIMA_ANTES_DO_JOGO] = [
+            leitura[coluna] for coluna in COLUNAS_DE_CLIMA
+        ]
         return int(na_janela.sum())

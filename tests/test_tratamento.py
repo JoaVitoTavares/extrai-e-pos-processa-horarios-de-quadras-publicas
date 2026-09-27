@@ -91,7 +91,7 @@ def test_janela_de_quatro_horas_ate_uma_hora_antes(extracoes, agora, escreve):
                                      str(extracoes), agora)
     TratamentoDeDados(str(extracoes)).aplicar(agora)
 
-    assert (reservas(extracoes).loc[0, "clima"] == "Encoberto") is escreve
+    assert (reservas(extracoes).loc[0, "antes_do_jogo_clima"] == "Encoberto") is escreve
 
 
 def test_rodada_mais_recente_sobrescreve(extracoes):
@@ -104,19 +104,19 @@ def test_rodada_mais_recente_sobrescreve(extracoes):
     tratamento.aplicar(datetime(2026, 8, 7, 19, 0))
 
     linha = reservas(extracoes).loc[0]
-    assert linha["clima"] == "Chuva forte"
-    assert linha["temperatura"] == "15.2"
+    assert linha["antes_do_jogo_clima"] == "Chuva forte"
+    assert linha["antes_do_jogo_temperatura"] == "15.2"
 
 
 def test_grava_as_cinco_colunas_com_os_valores_da_leitura(extracoes):
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 17, 0))
     linha = reservas(extracoes).loc[0]
 
-    assert linha["clima"] == "Encoberto"
-    assert linha["temperatura"] == "24.4"
-    assert linha["umidade"] == "76"
-    assert linha["precipitacao"] == "0.0"
-    assert linha["velocidade_vento"] == "13.1"
+    assert linha["antes_do_jogo_clima"] == "Encoberto"
+    assert linha["antes_do_jogo_temperatura"] == "24.4"
+    assert linha["antes_do_jogo_umidade"] == "76"
+    assert linha["antes_do_jogo_precipitacao"] == "0.0"
+    assert linha["antes_do_jogo_velocidade_vento"] == "13.1"
 
 
 def test_nao_mexe_nas_colunas_da_reserva(extracoes):
@@ -137,8 +137,8 @@ def test_linha_fora_da_janela_fica_intacta(extracoes):
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 17, 0))
     df = reservas(extracoes).set_index("horario_inicio")
 
-    assert df.loc["20:00", "clima"] == "Encoberto"
-    assert df.loc["23:00", "clima"] == ""
+    assert df.loc["20:00", "antes_do_jogo_clima"] == "Encoberto"
+    assert df.loc["23:00", "antes_do_jogo_clima"] == ""
 
 
 def test_reserva_de_outro_dia_nao_entra_na_janela(extracoes):
@@ -152,7 +152,7 @@ def test_reserva_de_outro_dia_nao_entra_na_janela(extracoes):
         extracoes / "areia-2-interna-extracoes.csv", dtype=str, keep_default_na=False
     )
 
-    assert outra.loc[0, "clima"] == ""
+    assert outra.loc[0, "antes_do_jogo_clima"] == ""
 
 
 def test_sem_leitura_de_clima_nada_e_tocado(tmp_path):
@@ -171,7 +171,7 @@ def test_sem_leitura_de_clima_nada_e_tocado(tmp_path):
 def test_leitura_velha_demais_e_ignorada(extracoes):
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 19, 0))
 
-    assert reservas(extracoes).loc[0, "clima"] == ""
+    assert reservas(extracoes).loc[0, "antes_do_jogo_clima"] == ""
 
 
 def test_leitura_futura_e_ignorada(extracoes):
@@ -181,7 +181,7 @@ def test_leitura_futura_e_ignorada(extracoes):
     )
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 16, 30))
 
-    assert reservas(extracoes).loc[0, "clima"] == "Encoberto"
+    assert reservas(extracoes).loc[0, "antes_do_jogo_clima"] == "Encoberto"
 
 
 def test_arquivo_de_clima_nao_e_tratado_como_quadra(extracoes):
@@ -233,7 +233,7 @@ def test_clima_da_reserva_nao_e_reescrito_por_rodada_posterior(extracoes):
     linha = reservas(extracoes).loc[0]
 
     assert linha["na_hora_da_reserva_clima"] == "Chuva fraca"
-    assert linha["clima"] == "Céu limpo"
+    assert linha["antes_do_jogo_clima"] == "Céu limpo"
 
 
 def test_horario_livre_nao_recebe_o_clima_da_reserva(extracoes):
@@ -325,7 +325,7 @@ def test_sem_previsao_o_clima_observado_continua_sendo_aplicado(extracoes):
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 17, 0))
     linha = reservas(extracoes).loc[0]
 
-    assert linha["clima"] == "Encoberto"
+    assert linha["antes_do_jogo_clima"] == "Encoberto"
     assert linha["previsao_para_o_jogo_no_momento_da_reserva_clima"] == ""
 
 
