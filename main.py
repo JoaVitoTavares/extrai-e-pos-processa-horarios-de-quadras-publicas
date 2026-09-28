@@ -11,6 +11,7 @@ from extrator.arena_extractor import ArenaExtractor
 from extrator.config import (
     ARENAS, ARENAS_EM_PARALELO, DAYS_AHEAD, DIRETORIO_EXTRACOES, DIRETORIO_LOGS, COURT_TYPES
 )
+from extrator.courts_collector import proxy_launch_settings
 from extrator.debug import debug
 from extrator.persistencia import registrar_verificacao, slug
 
@@ -43,6 +44,11 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         "--ate", type=int, default=DAYS_AHEAD, metavar="N",
         help=f"último dia a coletar, em dias a partir de hoje (padrão: {DAYS_AHEAD})",
     )
+    parser.add_argument(
+        "--proxy", default=os.getenv("ARENA_PROXY"), metavar="URL",
+        help="proxy do navegador, no formato http://usuario:senha@host:porta "
+             "(padrão: variável de ambiente ARENA_PROXY)",
+    )
     arguments = parser.parse_args(argv)
     if arguments.de < 0:
         parser.error(f"--de não aceita valor negativo (recebeu {arguments.de})")
@@ -50,6 +56,10 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error(
             f"--ate ({arguments.ate}) não pode ser menor que --de ({arguments.de})"
         )
+    try:
+        proxy_launch_settings(arguments.proxy)
+    except ValueError as error:
+        parser.error(str(error))
     return arguments
 
 
@@ -71,7 +81,9 @@ def main() -> None:
     with ThreadPoolExecutor(max_workers=max(1, min(ARENAS_EM_PARALELO, len(arenas)))) as executor:
         arena_by_future = {}
         for arena in arenas:
-            extractor = ArenaExtractor(arena, visible_browser, days_from, days_ahead)
+            extractor = ArenaExtractor(
+                arena, visible_browser, days_from, days_ahead, arguments.proxy
+            )
             future = executor.submit(extractor.extract_isolating_failures)
             arena_by_future[future] = arena
         for completed_run in as_completed(arena_by_future):

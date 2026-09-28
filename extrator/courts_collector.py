@@ -5,7 +5,7 @@ import time
 import requests
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from urllib.parse import urljoin
+from urllib.parse import unquote, urljoin, urlsplit
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 from extrator.config import (
@@ -367,6 +367,22 @@ def _collect_day(
     return collected
 
 
+def proxy_launch_settings(proxy: str | None) -> dict | None:
+    """Converte uma URL de proxy (`http://usuario:senha@host:porta`) no dicionário que o
+    Playwright espera em `chromium.launch(proxy=...)`. Retorna None quando não há proxy."""
+    if not proxy:
+        return None
+    parts = urlsplit(proxy)
+    if not parts.hostname:
+        raise ValueError(f"proxy inválido: {proxy}")
+    port = f":{parts.port}" if parts.port else ""
+    settings = {"server": f"{parts.scheme or 'http'}://{parts.hostname}{port}"}
+    if parts.username:
+        settings["username"] = unquote(parts.username)
+        settings["password"] = unquote(parts.password or "")
+    return settings
+
+
 def collect_schedules(
     sport: str,
     arena_url: str,
@@ -375,12 +391,15 @@ def collect_schedules(
     days_ahead: int = DAYS_AHEAD,
     days_from: int = 0,
     types: list[str] = COURT_TYPES,
+    proxy: str | None = None,
 ) -> list[dict]:
     periods = [period] if period else DEFAULT_PERIODS
+    proxy_settings = proxy_launch_settings(proxy)
 
     with sync_playwright() as p:
-        debug(f"'{sport}': abrindo navegador (headless={headless})")
-        browser = p.chromium.launch(headless=headless)
+        debug(f"'{sport}': abrindo navegador (headless={headless}, "
+              f"proxy={proxy_settings['server'] if proxy_settings else 'nenhum'})")
+        browser = p.chromium.launch(headless=headless, proxy=proxy_settings)
         page = browser.new_page()
 
         page.goto(arena_url, wait_until="networkidle", timeout=60_000)
