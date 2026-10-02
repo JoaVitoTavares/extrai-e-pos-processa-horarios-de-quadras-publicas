@@ -21,7 +21,8 @@ GEOCODING_LOCK = threading.Lock()
 class ArenaExtractor:
     """Executa o pipeline de uma arena: quadras, local, gravação, clima e tratamento.
     Cada chamada de `extract_isolating_failures` acumula o próprio log, então a
-    instância pode ser reusada em sequência, mas não em paralelo."""
+    instância pode ser reusada em sequência, mas não em paralelo.
+    """
 
     def __init__(
         self,
@@ -30,12 +31,19 @@ class ArenaExtractor:
         days_from: int = 0,
         days_ahead: int = DAYS_AHEAD,
         proxy: str | None = None,
+        # Novos parâmetros anti-bot
+        use_stealth: bool = True,
+        slow_mo: int = 50,                 # ms entre ações (ajuda a parecer humano)
+        user_agent: str | None = None,
     ) -> None:
         self.arena = arena
         self.visible_browser = visible_browser
         self.days_from = days_from
         self.days_ahead = days_ahead
         self.proxy = proxy
+        self.use_stealth = use_stealth
+        self.slow_mo = slow_mo
+        self.user_agent = user_agent
         self.output = sys.stdout
 
     def extract_isolating_failures(self) -> tuple[list[str], list[str], str]:
@@ -95,6 +103,9 @@ class ArenaExtractor:
                     days_from=self.days_from,
                     types=self.arena["tipos"],
                     proxy=self.proxy,
+                    use_stealth=self.use_stealth,
+                    slow_mo=self.slow_mo,
+                    user_agent=self.user_agent,
                 )
                 results.extend(sport_results)
             except PWTimeout as error:

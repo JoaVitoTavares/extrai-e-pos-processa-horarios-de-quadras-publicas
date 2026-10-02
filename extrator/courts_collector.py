@@ -8,6 +8,13 @@ from datetime import date, datetime, timedelta
 from urllib.parse import unquote, urljoin, urlsplit
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
+# Stealth (pip install playwright-stealth)
+try:
+    from playwright_stealth import stealth_sync
+    STEALTH_AVAILABLE = True
+except ImportError:
+    STEALTH_AVAILABLE = False
+
 from extrator.config import (
     API_INIT_PATH,
     DAYS_AHEAD,
@@ -17,6 +24,24 @@ from extrator.config import (
 )
 from extrator.debug import debug
 from extrator.persistencia import sem_acento
+
+# ---------------------------------------------------------------------------
+# Constantes de stealth / fingerprint
+# ---------------------------------------------------------------------------
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/129.0.0.0 Safari/537.36"
+)
+
+LAUNCH_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-infobars",
+    "--window-size=1920,1080",
+    "--disable-extensions",
+]
 
 SCHEDULE_PATTERN = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(Livre|Indispon\w+)", re.IGNORECASE)
 UNCOVERED_PATTERN = re.compile(r"extern|descobert", re.IGNORECASE)
@@ -392,42 +417,91 @@ def collect_schedules(
     days_from: int = 0,
     types: list[str] = COURT_TYPES,
     proxy: str | None = None,
+    # Novos parâmetros anti-bot
+    use_stealth: bool = True,
+    slow_mo: int = 50,
+    user_agent: str | None = None,
 ) -> list[dict]:
+    """
+    Coleta horários com proteção anti-bot (stealth + fingerprint).
+
+    Args:
+        use_stealth: aplica playwright-stealth (recomendado True)
+        slow_mo: atraso em ms entre ações do Playwright (ajuda a parecer humano)
+        user_agent: sobrescreve o User-Agent padrão
+    """
     periods = [period] if period else DEFAULT_PERIODS
     proxy_settings = proxy_launch_settings(proxy)
+    ua = user_agent or DEFAULT_USER_AGENT
 
     with sync_playwright() as p:
-        debug(f"'{sport}': abrindo navegador (headless={headless}, "
-              f"proxy={proxy_settings['server'] if proxy_settings else 'nenhum'})")
-        browser = p.chromium.launch(headless=headless, proxy=proxy_settings)
-        page = browser.new_page()
+        debug(
+            f"'{sport}': abrindo navegador (headless={headless}, "
+            f"stealth={use_stealth and STEALTH_AVAILABLE}, "
+            f"proxy={proxy_settings['server'] if proxy_settings else 'nenhum'})"
+        )
 
-        page.goto(arena_url, wait_until="networkidle", timeout=60_000)
-        debug(f"'{sport}': pagina carregada, escolhendo esporte")
-        if not _choose_sport(page, sport):
-            debug(f"'{sport}': arena sem agenda na web, encerrando")
-            browser.close()
-            return [
-                Court(None, sport, types).record(
-                    periods[0], date.today(), [], NO_SCHEDULE_WARNING
+        browser = p.chromium.launch(
+            headless=headless,
+            slow_mo=slow_mo,
+            args=LAUNCH_ARGS,
+            proxy=proxy_settings,
+        )
+
+        # Context com fingerprint mais realista
+        context = browser.new_context(
+            user_agent=ua,
+            viewport={"width": 1920, "height": 1080},
+            locale="pt-BR",
+            timezone_id="America/Sao_Paulo",
+            # color_scheme="light",
+        )
+
+        page = context.new_page()
+
+        # Aplica stealth (se disponível e solicitado)
+        if use_stealth and STEALTH_AVAILABLE:
+            stealth_sync(page)
+            debug(f"'{sport}': stealth aplicado")
+        elif use_stealth and not STEALTH_AVAILABLE:
+            debug(
+                f"'{sport}': playwright-stealth não instalado "
+                "(pip install playwright-stealth) — continuando sem stealth"
+            )
+
+        try:
+            page.goto(arena_url, wait_until="networkidle", timeout=60_000)
+            debug(f"'{sport}': pagina carregada, escolhendo esporte")
+
+            if not _choose_sport(page, sport):
+                debug(f"'{sport}': arena sem agenda na web, encerrando")
+                return [
+                    Court(None, sport, types).record(
+                        periods[0], date.today(), [], NO_SCHEDULE_WARNING
+                    )
+                ]
+
+            address = extract_address(page, sport)
+            debug(f"'{sport}': endereco lido: {address or '(vazio)'}")
+
+            today = date.today()
+            days = collection_days(today, days_ahead, days_from)
+            results = []
+
+            for index, day in enumerate(days):
+                debug(f"'{sport}': dia {index + 1}/{len(days)} ({day.isoformat()})")
+                try:
+                    _select_day(page, day)
+                except PWTimeout as error:
+                    debug(f"'{sport}': dia {day.isoformat()} pulado: {error}")
+                    continue
+                results.extend(
+                    _collect_day(page, sport, day, periods, day == today, types)
                 )
-            ]
-        address = extract_address(page, sport)
-        debug(f"'{sport}': endereco lido: {address or '(vazio)'}")
 
-        today = date.today()
-        days = collection_days(today, days_ahead, days_from)
-        results = []
-        for index, day in enumerate(days):
-            debug(f"'{sport}': dia {index + 1}/{len(days)} ({day.isoformat()})")
-            try:
-                _select_day(page, day)
-            except PWTimeout as error:
-                debug(f"'{sport}': dia {day.isoformat()} pulado: {error}")
-                continue
-            results.extend(_collect_day(page, sport, day, periods, day == today, types))
+            debug(f"'{sport}': fechando navegador com {len(results)} registro(s)")
+            return [dict(court, endereco=address) for court in results]
 
-        debug(f"'{sport}': fechando navegador com {len(results)} registro(s)")
-        browser.close()
-
-    return [dict(court, endereco=address) for court in results]
+        finally:
+            context.close()
+            browser.close()
