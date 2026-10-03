@@ -34,6 +34,12 @@ def sem_pausa_real_entre_acessos(monkeypatch):
     monkeypatch.setattr("extrator.timing.time.sleep", lambda segundos: None)
 
 
+@pytest.fixture(autouse=True)
+def madrugada_libera_nos_testes(monkeypatch):
+    """Mantém as rodadas de teste fora da trava da madrugada, salvo quando o teste a exercita."""
+    monkeypatch.setattr("main.night_access_allowed", lambda moment=None: True)
+
+
 @pytest.fixture
 def respostas(monkeypatch):
     chamadas = []

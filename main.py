@@ -15,6 +15,7 @@ from extrator.courts_collector import proxy_launch_settings
 from extrator.debug import debug
 from extrator.persistencia import registrar_verificacao, slug
 from extrator.timing import wait_between_accesses
+from extrator.access_windows import night_access_allowed
 
 
 def normalize_arena_info(arena: dict) -> dict:
@@ -66,6 +67,9 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main() -> None:
     arguments = parse_arguments()
+    if not night_access_allowed():
+        print("madrugada: acesso adiado até a próxima janela de 3 horas.")
+        return
     visible_browser = arguments.ver
     days_from, days_ahead = arguments.de, arguments.ate
     if days_ahead > DAYS_AHEAD:
