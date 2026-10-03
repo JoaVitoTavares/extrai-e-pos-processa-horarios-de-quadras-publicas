@@ -26,6 +26,7 @@ from extrator.debug import debug
 from extrator.persistencia import sem_acento
 from extrator.timing import wait_between_accesses
 from extrator.human import simulate_human_failure
+from extrator.captcha import captcha_detected
 
 
 def click_with_pause(target, **kwargs):
@@ -483,6 +484,7 @@ def collect_schedules(
 
         try:
             page.goto(arena_url, wait_until="networkidle", timeout=60_000)
+            captcha_detected(page)
             debug(f"'{sport}': pagina carregada, escolhendo esporte")
 
             if not _choose_sport(page, sport):
