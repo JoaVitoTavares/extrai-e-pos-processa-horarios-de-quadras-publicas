@@ -12,6 +12,7 @@ from extrator.courts_collector import (
 )
 from extrator.localizacao import endereco_observado, resolver_local
 from extrator.persistencia import salvar_extracao
+from extrator.profiles import draw_access_profile
 from extrator.tratamento import TratamentoDeDados
 from extrator.weather_collector import record_forecast, record_weather
 
@@ -90,6 +91,7 @@ class ArenaExtractor:
                   file=self.output)
 
         results = []
+        profile = draw_access_profile()
         for sport in target_sports:
             print(f"\n>> TÉCNICA 2 (Playwright): horários de '{sport}' (todos os períodos)...",
                   file=self.output)
@@ -106,6 +108,7 @@ class ArenaExtractor:
                     use_stealth=self.use_stealth,
                     slow_mo=self.slow_mo,
                     user_agent=self.user_agent,
+                    viewport=profile["viewport"],
                 )
                 results.extend(sport_results)
             except PWTimeout as error:

@@ -423,6 +423,7 @@ def collect_schedules(
     use_stealth: bool = True,
     slow_mo: int = 50,
     user_agent: str | None = None,
+    viewport: dict | None = None,
 ) -> list[dict]:
     """
     Coleta horários com proteção anti-bot (stealth + fingerprint).
@@ -435,6 +436,7 @@ def collect_schedules(
     periods = [period] if period else DEFAULT_PERIODS
     proxy_settings = proxy_launch_settings(proxy)
     ua = user_agent or DEFAULT_USER_AGENT
+    screen = viewport or {"width": 1920, "height": 1080}
     wait_between_accesses()
 
     with sync_playwright() as p:
@@ -454,7 +456,7 @@ def collect_schedules(
         # Context com fingerprint mais realista
         context = browser.new_context(
             user_agent=ua,
-            viewport={"width": 1920, "height": 1080},
+            viewport=screen,
             locale="pt-BR",
             timezone_id="America/Sao_Paulo",
             # color_scheme="light",
