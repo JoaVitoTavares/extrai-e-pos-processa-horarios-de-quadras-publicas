@@ -23,6 +23,7 @@ from extrator.access_windows import (
     peak_times_for_arena,
 )
 from extrator.email_config import load_dotenv
+from extrator.pause import CaptchaPause, is_paused
 
 
 def normalize_arena_info(arena: dict) -> dict:
@@ -89,6 +90,9 @@ def main() -> None:
     if not night_access_allowed():
         print("madrugada: acesso adiado até a próxima janela de 3 horas.")
         return
+    if is_paused():
+        print("pausado por captcha: extrações adiadas até o fim da trava de 2 horas.")
+        return
     visible_browser = arguments.ver
     days_from, days_ahead = arguments.de, arguments.ate
     if days_from >= 1 and current_peak_window() is None:
@@ -109,6 +113,9 @@ def main() -> None:
     with ThreadPoolExecutor(max_workers=max(1, min(ARENAS_EM_PARALELO, len(arenas)))) as executor:
         arena_by_future = {}
         for arena in arenas:
+            if is_paused():
+                print("pausado por captcha: encerrando as verificações em andamento.")
+                break
             if days_from >= 1:
                 moment = local_now()
                 window = current_peak_window(moment)
@@ -126,7 +133,11 @@ def main() -> None:
             future = executor.submit(extractor.extract_isolating_failures)
             arena_by_future[future] = arena
         for completed_run in as_completed(arena_by_future):
-            paths, verified_courts, run_log = completed_run.result()
+            try:
+                paths, verified_courts, run_log = completed_run.result()
+            except CaptchaPause as error:
+                print(f"pausado por captcha: {error}")
+                break
             print(run_log, end="")
             registrar_verificacao(
                 arena_by_future[completed_run]["nome"], verified_courts, DIRETORIO_LOGS
@@ -139,6 +150,8 @@ def main() -> None:
                   f"faltam {pending_arenas}")
 
     if not saved_paths:
+        if is_paused():
+            return
         print("\n[ERRO] nenhuma quadra coletada em nenhuma arena.", file=sys.stderr)
         sys.exit(1)
 

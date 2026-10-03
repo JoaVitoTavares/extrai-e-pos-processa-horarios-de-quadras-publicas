@@ -1,5 +1,6 @@
 """Testes do aviso por e-mail em captcha e falhas, sem SMTP real."""
 
+import pytest
 from playwright.sync_api import TimeoutError as PWTimeout
 
 from extrator import arena_extractor
@@ -92,8 +93,10 @@ def test_captcha_dispara_um_email(monkeypatch):
 
     monkeypatch.setattr(courts_collector, "sync_playwright", lambda: Playwright())
     monkeypatch.setattr(courts_collector, "_choose_sport", lambda *a, **k: False)
+    monkeypatch.setattr(courts_collector, "engage_captcha_pause", lambda: None)
 
-    courts_collector.collect_schedules("Grama 5", "https://webarena.app/arena/x")
+    with pytest.raises(courts_collector.CaptchaPause):
+        courts_collector.collect_schedules("Grama 5", "https://webarena.app/arena/x")
 
     assert len(avisos) == 1
     assert "captcha" in avisos[0][0].lower()

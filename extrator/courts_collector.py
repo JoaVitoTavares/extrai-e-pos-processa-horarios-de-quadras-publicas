@@ -28,6 +28,7 @@ from extrator.timing import wait_between_accesses
 from extrator.human import simulate_human_failure
 from extrator.captcha import captcha_detected
 from extrator.email_config import send_alert
+from extrator.pause import CaptchaPause, engage_captcha_pause, is_paused
 
 
 def click_with_pause(target, **kwargs):
@@ -442,6 +443,8 @@ def collect_schedules(
         slow_mo: atraso em ms entre ações do Playwright (ajuda a parecer humano)
         user_agent: sobrescreve o User-Agent padrão
     """
+    if is_paused():
+        raise CaptchaPause("coleta pausada por captcha")
     periods = [period] if period else DEFAULT_PERIODS
     proxy_settings = proxy_launch_settings(proxy)
     ua = user_agent or DEFAULT_USER_AGENT
@@ -490,6 +493,8 @@ def collect_schedules(
                     "Captcha detectado na extração",
                     f"A frase 'não sou um robô' apareceu em {arena_url} ({sport}).",
                 )
+                engage_captcha_pause()
+                raise CaptchaPause("captcha detectado")
             debug(f"'{sport}': pagina carregada, escolhendo esporte")
 
             if not _choose_sport(page, sport):
@@ -509,6 +514,8 @@ def collect_schedules(
             results = []
 
             for index, day in enumerate(days):
+                if is_paused():
+                    raise CaptchaPause("coleta pausada por captcha")
                 debug(f"'{sport}': dia {index + 1}/{len(days)} ({day.isoformat()})")
                 try:
                     _select_day(page, day)

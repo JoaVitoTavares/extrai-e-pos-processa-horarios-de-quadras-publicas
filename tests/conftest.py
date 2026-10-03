@@ -40,6 +40,16 @@ def madrugada_libera_nos_testes(monkeypatch):
     monkeypatch.setattr("main.night_access_allowed", lambda moment=None: True)
 
 
+@pytest.fixture(autouse=True)
+def sem_trava_de_captcha(monkeypatch, request):
+    """Evita que uma trava de captcha residual derrube a suíte, salvo nos testes da própria trava."""
+    if request.module.__name__.endswith("test_pause"):
+        return
+    monkeypatch.setattr("extrator.pause.is_paused", lambda moment=None: False)
+    monkeypatch.setattr("extrator.courts_collector.is_paused", lambda moment=None: False)
+    monkeypatch.setattr("main.is_paused", lambda moment=None: False)
+
+
 @pytest.fixture
 def respostas(monkeypatch):
     chamadas = []
