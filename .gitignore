@@ -4,3 +4,4 @@
 .extrações/
 .logs/
 __pycache__/
+.env

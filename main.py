@@ -22,6 +22,7 @@ from extrator.access_windows import (
     night_access_allowed,
     peak_times_for_arena,
 )
+from extrator.email_config import load_dotenv
 
 
 def normalize_arena_info(arena: dict) -> dict:
@@ -83,6 +84,7 @@ def arena_schedule_key(arena: dict) -> str:
 
 
 def main() -> None:
+    load_dotenv()
     arguments = parse_arguments()
     if not night_access_allowed():
         print("madrugada: acesso adiado até a próxima janela de 3 horas.")
