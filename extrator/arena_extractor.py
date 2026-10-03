@@ -107,7 +107,7 @@ class ArenaExtractor:
                     proxy=self.proxy,
                     use_stealth=self.use_stealth,
                     slow_mo=self.slow_mo,
-                    user_agent=self.user_agent,
+                    user_agent=self.user_agent or profile["user_agent"],
                     viewport=profile["viewport"],
                 )
                 results.extend(sport_results)
