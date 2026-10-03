@@ -1,5 +1,3 @@
-"""Trava persistente que pausa extrações por duas horas após um captcha."""
-
 import os
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -22,7 +20,6 @@ def pause_lock_path() -> str:
 
 
 def engage_captcha_pause(moment: datetime | None = None) -> datetime:
-    """Grava a trava 'pausado até agora + 2 horas' no fuso America/Sao_Paulo."""
     until = local_now(moment) + timedelta(hours=CAPTCHA_PAUSE_HOURS)
     with open(pause_lock_path(), "w", encoding="utf-8") as lock_file:
         lock_file.write(until.isoformat())
@@ -30,7 +27,6 @@ def engage_captcha_pause(moment: datetime | None = None) -> datetime:
 
 
 def is_paused(moment: datetime | None = None) -> bool:
-    """Diz se a trava ainda está dentro da janela de duas horas."""
     path = pause_lock_path()
     if not os.path.isfile(path):
         return False
