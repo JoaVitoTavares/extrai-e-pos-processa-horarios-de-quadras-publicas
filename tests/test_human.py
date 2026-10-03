@@ -5,16 +5,16 @@ import random
 from extrator import human
 
 
-class Alvo:
-    def __init__(self, nome, log):
-        self.nome = nome
+class Target:
+    def __init__(self, name, log):
+        self.name = name
         self.log = log
 
     def click(self, **kwargs):
-        self.log.append(f"click:{self.nome}")
+        self.log.append(f"click:{self.name}")
 
     def hover(self):
-        self.log.append(f"hover:{self.nome}")
+        self.log.append(f"hover:{self.name}")
 
 
 class Mouse:
@@ -25,7 +25,7 @@ class Mouse:
         self.log.append(("wheel", x, y))
 
 
-class PaginaFalsa:
+class FakePage:
     def __init__(self):
         self.log = []
         self.mouse = Mouse(self.log)
@@ -34,80 +34,80 @@ class PaginaFalsa:
         self.log.append("back")
 
 
-def test_falhas_humanas_sorteiam_as_quatro_variantes(monkeypatch):
-    vistas = set()
+def test_human_failures_draw_the_four_variants(monkeypatch):
+    seen = set()
     monkeypatch.setattr(human, "wait_between_clicks", lambda: None)
     for i in range(40):
-        pagina = PaginaFalsa()
-        intended = Alvo("certo", pagina.log)
-        distractor = Alvo("errado", pagina.log)
-        vistas.add(
+        page = FakePage()
+        intended = Target("right", page.log)
+        distractor = Target("wrong", page.log)
+        seen.add(
             human.simulate_human_failure(
-                pagina, intended, distractor, rng=random.Random(i)
+                page, intended, distractor, rng=random.Random(i)
             )
         )
-    assert vistas == {"wrong_click", "redo", "hover_hesitate", "overscroll"}
+    assert seen == {"wrong_click", "redo", "hover_hesitate", "overscroll"}
 
 
-def test_clique_errado_volta_e_pausa_entre_os_passos(monkeypatch):
-    pausas = []
-    monkeypatch.setattr(human, "wait_between_clicks", lambda: pausas.append("pausa"))
-    pagina = PaginaFalsa()
-    intended = Alvo("certo", pagina.log)
-    distractor = Alvo("errado", pagina.log)
+def test_wrong_click_goes_back_and_pauses_between_steps(monkeypatch):
+    pauses = []
+    monkeypatch.setattr(human, "wait_between_clicks", lambda: pauses.append("pause"))
+    page = FakePage()
+    intended = Target("right", page.log)
+    distractor = Target("wrong", page.log)
 
-    tipo = human.simulate_human_failure(
-        pagina, intended, distractor, rng=_rng_fixo("wrong_click")
+    kind = human.simulate_human_failure(
+        page, intended, distractor, rng=_fixed_rng("wrong_click")
     )
 
-    assert tipo == "wrong_click"
-    assert pagina.log == ["click:errado", "back"]
-    assert len(pausas) >= 2
+    assert kind == "wrong_click"
+    assert page.log == ["click:wrong", "back"]
+    assert len(pauses) >= 2
 
 
-def test_refazer_volta_e_repete_o_alvo(monkeypatch):
+def test_redo_goes_back_and_repeats_the_target(monkeypatch):
     monkeypatch.setattr(human, "wait_between_clicks", lambda: None)
-    pagina = PaginaFalsa()
-    intended = Alvo("certo", pagina.log)
+    page = FakePage()
+    intended = Target("right", page.log)
 
-    tipo = human.simulate_human_failure(
-        pagina, intended, rng=_rng_fixo("redo")
+    kind = human.simulate_human_failure(
+        page, intended, rng=_fixed_rng("redo")
     )
 
-    assert tipo == "redo"
-    assert pagina.log == ["back", "click:certo"]
+    assert kind == "redo"
+    assert page.log == ["back", "click:right"]
 
 
-def test_hesita_no_alvo_sem_clicar(monkeypatch):
+def test_hesitates_on_the_target_without_clicking(monkeypatch):
     monkeypatch.setattr(human, "wait_between_clicks", lambda: None)
-    pagina = PaginaFalsa()
-    intended = Alvo("certo", pagina.log)
+    page = FakePage()
+    intended = Target("right", page.log)
 
-    tipo = human.simulate_human_failure(
-        pagina, intended, rng=_rng_fixo("hover_hesitate")
+    kind = human.simulate_human_failure(
+        page, intended, rng=_fixed_rng("hover_hesitate")
     )
 
-    assert tipo == "hover_hesitate"
-    assert pagina.log == ["hover:certo"]
-    assert "click:certo" not in pagina.log
+    assert kind == "hover_hesitate"
+    assert page.log == ["hover:right"]
+    assert "click:right" not in page.log
 
 
-def test_rola_alem_e_volta(monkeypatch):
+def test_scrolls_past_and_returns(monkeypatch):
     monkeypatch.setattr(human, "wait_between_clicks", lambda: None)
-    pagina = PaginaFalsa()
+    page = FakePage()
 
-    tipo = human.simulate_human_failure(pagina, rng=_rng_fixo("overscroll"))
+    kind = human.simulate_human_failure(page, rng=_fixed_rng("overscroll"))
 
-    assert tipo == "overscroll"
-    assert pagina.log[0][0] == "wheel"
-    assert pagina.log[0][2] > 0
-    assert pagina.log[1][0] == "wheel"
-    assert pagina.log[1][2] < 0
+    assert kind == "overscroll"
+    assert page.log[0][0] == "wheel"
+    assert page.log[0][2] > 0
+    assert page.log[1][0] == "wheel"
+    assert page.log[1][2] < 0
 
 
-class _rng_fixo:
-    def __init__(self, escolhido):
-        self.escolhido = escolhido
+class _fixed_rng:
+    def __init__(self, chosen):
+        self.chosen = chosen
 
-    def choice(self, opcoes):
-        return self.escolhido
+    def choice(self, options):
+        return self.chosen

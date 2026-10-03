@@ -35,13 +35,13 @@ def sem_pausa_real_entre_acessos(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def madrugada_libera_nos_testes(monkeypatch):
+def night_access_allowed_in_tests(monkeypatch):
     """Mantém as rodadas de teste fora da trava da madrugada, salvo quando o teste a exercita."""
     monkeypatch.setattr("main.night_access_allowed", lambda moment=None: True)
 
 
 @pytest.fixture(autouse=True)
-def sem_trava_de_captcha(monkeypatch, request):
+def no_captcha_pause_lock(monkeypatch, request):
     """Evita que uma trava de captcha residual derrube a suíte, salvo nos testes da própria trava."""
     if request.module.__name__.endswith("test_pause"):
         return

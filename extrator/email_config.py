@@ -15,8 +15,8 @@ def load_dotenv(path: str | os.PathLike = ".env") -> None:
     """Lê um arquivo .env e preenche variáveis ainda ausentes no ambiente."""
     if not os.path.isfile(path):
         return
-    with open(path, encoding="utf-8") as arquivo:
-        for line in arquivo:
+    with open(path, encoding="utf-8") as env_file:
+        for line in env_file:
             stripped = line.strip()
             if not stripped or stripped.startswith("#") or "=" not in stripped:
                 continue

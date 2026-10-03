@@ -124,27 +124,27 @@ def test_rodada_espera_antes_de_acessar_as_arenas(monkeypatch, tmp_path):
     assert ordem.index("espera-cron") < ordem.index("quadras")
 
 
-def test_pausa_entre_cliques_reusa_o_intervalo_entre_acessos(monkeypatch):
-    observados = []
-    monkeypatch.setattr(timing.time, "sleep", observados.append)
+def test_click_pause_reuses_the_access_interval(monkeypatch):
+    observed = []
+    monkeypatch.setattr(timing.time, "sleep", observed.append)
     rng = random.Random(3)
 
-    segundos = timing.wait_between_clicks(rng=rng)
+    seconds = timing.wait_between_clicks(rng=rng)
 
-    assert observados == [segundos]
-    assert config.ACCESS_INTERVAL_MIN_S <= segundos <= config.ACCESS_INTERVAL_MAX_S
+    assert observed == [seconds]
+    assert config.ACCESS_INTERVAL_MIN_S <= seconds <= config.ACCESS_INTERVAL_MAX_S
 
 
-def test_clique_humano_espera_antes_de_clicar(monkeypatch):
-    ordem = []
+def test_human_click_waits_before_clicking(monkeypatch):
+    order = []
     monkeypatch.setattr(
-        courts_collector, "wait_between_accesses", lambda: ordem.append("espera")
+        courts_collector, "wait_between_accesses", lambda: order.append("wait")
     )
 
-    class Alvo:
+    class Target:
         def click(self, **kwargs):
-            ordem.append(("clique", kwargs))
+            order.append(("click", kwargs))
 
-    courts_collector.click_with_pause(Alvo(), timeout=1000)
+    courts_collector.click_with_pause(Target(), timeout=1000)
 
-    assert ordem == ["espera", ("clique", {"timeout": 1000})]
+    assert order == ["wait", ("click", {"timeout": 1000})]

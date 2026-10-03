@@ -10,12 +10,12 @@ import main
 from test_main import ARENA
 
 
-def test_envia_um_email_com_os_dados_do_env(monkeypatch):
-    enviados = []
+def test_sends_one_email_with_the_env_settings(monkeypatch):
+    sent = []
 
-    class SMTPFalso:
+    class FakeSMTP:
         def __init__(self, host, port):
-            enviados.append({"host": host, "port": port})
+            sent.append({"host": host, "port": port})
 
         def __enter__(self):
             return self
@@ -24,18 +24,18 @@ def test_envia_um_email_com_os_dados_do_env(monkeypatch):
             return False
 
         def starttls(self):
-            enviados.append("starttls")
+            sent.append("starttls")
 
         def login(self, user, password):
-            enviados.append({"user": user, "password": password})
+            sent.append({"user": user, "password": password})
 
         def send_message(self, message):
-            enviados.append({"to": message["To"], "subject": message["Subject"], "body": message.get_content()})
+            sent.append({"to": message["To"], "subject": message["Subject"], "body": message.get_content()})
 
-    monkeypatch.setattr(email_config.smtplib, "SMTP", SMTPFalso)
+    monkeypatch.setattr(email_config.smtplib, "SMTP", FakeSMTP)
     email_config.send_alert(
-        "assunto",
-        "corpo",
+        "subject",
+        "body",
         settings={
             "host": "smtp.exemplo.com",
             "port": 587,
@@ -45,28 +45,28 @@ def test_envia_um_email_com_os_dados_do_env(monkeypatch):
         },
     )
 
-    assert enviados[0] == {"host": "smtp.exemplo.com", "port": 587}
-    assert {"user": "aviso@exemplo.com", "password": "segredo"} in enviados
-    assert enviados[-1]["to"] == "destino@exemplo.com"
-    assert enviados[-1]["subject"] == "assunto"
-    assert "corpo" in enviados[-1]["body"]
+    assert sent[0] == {"host": "smtp.exemplo.com", "port": 587}
+    assert {"user": "aviso@exemplo.com", "password": "segredo"} in sent
+    assert sent[-1]["to"] == "destino@exemplo.com"
+    assert sent[-1]["subject"] == "subject"
+    assert "body" in sent[-1]["body"]
 
 
-def test_sem_servidor_configurado_nao_tenta_enviar():
+def test_without_a_configured_server_it_does_not_send():
     email_config.send_alert(
         "x", "y",
         settings={"host": "", "port": 587, "user": "", "password": "", "recipient": "a@b.c"},
     )
 
 
-def test_captcha_dispara_um_email(monkeypatch):
-    avisos = []
-    monkeypatch.setattr(courts_collector, "send_alert", lambda *a, **k: avisos.append(a))
+def test_captcha_triggers_one_email(monkeypatch):
+    alerts = []
+    monkeypatch.setattr(courts_collector, "send_alert", lambda *a, **k: alerts.append(a))
     monkeypatch.setattr(courts_collector, "captcha_detected", lambda page: True)
     monkeypatch.setattr(courts_collector, "wait_between_accesses", lambda: None)
     monkeypatch.setattr(courts_collector, "STEALTH_AVAILABLE", False)
 
-    class Navegador:
+    class Browser:
         def launch(self, **kwargs):
             return self
         def new_context(self, **kwargs):
@@ -89,7 +89,7 @@ def test_captcha_dispara_um_email(monkeypatch):
             return False
         @property
         def chromium(self):
-            return Navegador()
+            return Browser()
 
     monkeypatch.setattr(courts_collector, "sync_playwright", lambda: Playwright())
     monkeypatch.setattr(courts_collector, "_choose_sport", lambda *a, **k: False)
@@ -98,20 +98,20 @@ def test_captcha_dispara_um_email(monkeypatch):
     with pytest.raises(courts_collector.CaptchaPause):
         courts_collector.collect_schedules("Grama 5", "https://webarena.app/arena/x")
 
-    assert len(avisos) == 1
-    assert "captcha" in avisos[0][0].lower()
+    assert len(alerts) == 1
+    assert "captcha" in alerts[0][0].lower()
 
 
-def test_excecao_da_arena_dispara_um_email(monkeypatch):
-    avisos = []
-    monkeypatch.setattr(arena_extractor, "send_alert", lambda *a, **k: avisos.append(a))
+def test_arena_exception_triggers_one_email(monkeypatch):
+    alerts = []
+    monkeypatch.setattr(arena_extractor, "send_alert", lambda *a, **k: alerts.append(a))
     monkeypatch.setattr(
         arena_extractor.ArenaExtractor, "_collect_courts",
-        lambda self: (_ for _ in ()).throw(PWTimeout("tempo")),
+        lambda self: (_ for _ in ()).throw(PWTimeout("timeout")),
     )
     extractor = arena_extractor.ArenaExtractor(main.normalize_arena_info(ARENA))
 
     extractor.extract_isolating_failures()
 
-    assert len(avisos) == 1
-    assert "tempo" in avisos[0][1].lower() or "tempo" in avisos[0][0].lower()
+    assert len(alerts) == 1
+    assert "timeout" in alerts[0][1].lower() or "timeout" in alerts[0][0].lower()

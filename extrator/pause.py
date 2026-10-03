@@ -8,7 +8,7 @@ from extrator.access_windows import local_now
 from extrator.config import DIRETORIO_LOGS, FUSO_HORARIO
 
 CAPTCHA_PAUSE_HOURS = 2
-PAUSE_LOCK_NAME = "captcha-pausado-ate"
+PAUSE_LOCK_NAME = "captcha-paused-until"
 
 
 class CaptchaPause(Exception):
@@ -24,8 +24,8 @@ def pause_lock_path() -> str:
 def engage_captcha_pause(moment: datetime | None = None) -> datetime:
     """Grava a trava 'pausado até agora + 2 horas' no fuso America/Sao_Paulo."""
     until = local_now(moment) + timedelta(hours=CAPTCHA_PAUSE_HOURS)
-    with open(pause_lock_path(), "w", encoding="utf-8") as arquivo:
-        arquivo.write(until.isoformat())
+    with open(pause_lock_path(), "w", encoding="utf-8") as lock_file:
+        lock_file.write(until.isoformat())
     return until
 
 
@@ -34,11 +34,11 @@ def is_paused(moment: datetime | None = None) -> bool:
     path = pause_lock_path()
     if not os.path.isfile(path):
         return False
-    with open(path, encoding="utf-8") as arquivo:
-        texto = arquivo.read().strip()
-    if not texto:
+    with open(path, encoding="utf-8") as lock_file:
+        text = lock_file.read().strip()
+    if not text:
         return False
-    until = datetime.fromisoformat(texto)
+    until = datetime.fromisoformat(text)
     if until.tzinfo is None:
         until = until.replace(tzinfo=ZoneInfo(FUSO_HORARIO))
     return local_now(moment) < until

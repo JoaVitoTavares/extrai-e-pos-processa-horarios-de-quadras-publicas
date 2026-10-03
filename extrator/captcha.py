@@ -5,5 +5,5 @@ CAPTCHA_PHRASE = "não sou um robô"
 
 def captcha_detected(page) -> bool:
     """Indica se a página exibe a frase 'não sou um robô' do captcha do Google."""
-    texto = page.locator("body").inner_text()
-    return CAPTCHA_PHRASE in (texto or "").casefold()
+    text = page.locator("body").inner_text()
+    return CAPTCHA_PHRASE in (text or "").casefold()

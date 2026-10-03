@@ -4,30 +4,30 @@ from extrator import captcha
 from extrator import courts_collector
 
 
-class PaginaFalsa:
-    def __init__(self, texto):
-        self.texto = texto
+class FakePage:
+    def __init__(self, text):
+        self.text = text
 
-    def locator(self, seletor):
+    def locator(self, selector):
         return self
 
     def inner_text(self):
-        return self.texto
+        return self.text
 
 
-def test_detecta_a_frase_nao_sou_um_robo():
-    assert captcha.captcha_detected(PaginaFalsa('Marque a caixa "Não sou um robô"')) is True
+def test_detects_the_not_a_robot_phrase():
+    assert captcha.captcha_detected(FakePage('Marque a caixa "Não sou um robô"')) is True
 
 
-def test_detecta_a_frase_mesmo_em_caixa_baixa():
-    assert captcha.captcha_detected(PaginaFalsa("não sou um robô")) is True
+def test_detects_the_phrase_in_lowercase():
+    assert captcha.captcha_detected(FakePage("não sou um robô")) is True
 
 
-def test_pagina_comum_nao_e_captcha():
-    assert captcha.captcha_detected(PaginaFalsa("Horários disponíveis para a quadra")) is False
+def test_ordinary_page_is_not_captcha():
+    assert captcha.captcha_detected(FakePage("Horários disponíveis para a quadra")) is False
 
 
-class _Navegador:
+class _Browser:
     def launch(self, **kwargs):
         return self
 
@@ -53,27 +53,27 @@ class _Playwright:
 
     @property
     def chromium(self):
-        return _Navegador()
+        return _Browser()
 
 
-def test_coleta_consulta_o_detector_ao_abrir_a_pagina(monkeypatch):
-    ordem = []
+def test_collection_checks_the_detector_when_the_page_opens(monkeypatch):
+    order = []
     monkeypatch.setattr(courts_collector, "wait_between_accesses", lambda: None)
     monkeypatch.setattr(courts_collector, "STEALTH_AVAILABLE", False)
     monkeypatch.setattr(courts_collector, "sync_playwright", lambda: _Playwright())
     monkeypatch.setattr(
         courts_collector, "captcha_detected",
-        lambda page: ordem.append("captcha") or False,
+        lambda page: order.append("captcha") or False,
     )
     monkeypatch.setattr(
         courts_collector, "_choose_sport",
-        lambda *a, **k: ordem.append("esporte") or False,
+        lambda *a, **k: order.append("sport") or False,
     )
 
-    def goto_falso(*args, **kwargs):
-        ordem.append("goto")
+    def fake_goto(*args, **kwargs):
+        order.append("goto")
 
-    monkeypatch.setattr(_Navegador, "goto", goto_falso)
+    monkeypatch.setattr(_Browser, "goto", fake_goto)
     courts_collector.collect_schedules("Grama 5", "https://webarena.app/arena/x")
 
-    assert ordem[:2] == ["goto", "captcha"]
+    assert order[:2] == ["goto", "captcha"]
