@@ -5,6 +5,13 @@ RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIRETORIO_LOGS="$RAIZ/.logs"
 ARQUIVO_TRAVA="/tmp/extrator-quadras.lock"
 LIMITE_DE_EXECUCAO="14m"
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+    if [ "${args[$i]}" = "--de" ] && [ "${args[$((i + 1))]:-0}" != "0" ]; then
+        LIMITE_DE_EXECUCAO="3h"
+        break
+    fi
+done
 
 export HOME="${HOME:-/home/tavares}"
 export TZ="America/Sao_Paulo"

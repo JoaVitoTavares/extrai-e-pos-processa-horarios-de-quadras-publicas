@@ -3,6 +3,7 @@
 import argparse
 import os
 import sys
+import time
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from playwright.sync_api import TimeoutError as PWTimeout
@@ -15,7 +16,12 @@ from extrator.courts_collector import proxy_launch_settings
 from extrator.debug import debug
 from extrator.persistencia import registrar_verificacao, slug
 from extrator.timing import wait_between_accesses
-from extrator.access_windows import night_access_allowed
+from extrator.access_windows import (
+    current_peak_window,
+    local_now,
+    night_access_allowed,
+    peak_times_for_arena,
+)
 
 
 def normalize_arena_info(arena: dict) -> dict:
@@ -65,6 +71,17 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     return arguments
 
 
+def sleep_seconds(seconds: float) -> None:
+    """Pausa a rodada pelo número de segundos informado."""
+    if seconds > 0:
+        time.sleep(seconds)
+
+
+def arena_schedule_key(arena: dict) -> str:
+    """Usa o nome do diretório da arena como chave estável do horário de pico."""
+    return os.path.basename(arena["diretorio"])
+
+
 def main() -> None:
     arguments = parse_arguments()
     if not night_access_allowed():
@@ -72,6 +89,9 @@ def main() -> None:
         return
     visible_browser = arguments.ver
     days_from, days_ahead = arguments.de, arguments.ate
+    if days_from >= 1 and current_peak_window() is None:
+        print("fora da janela de pico; extração do dia seguinte adiada.")
+        return
     if days_ahead > DAYS_AHEAD:
         print(f"[AVISO] a previsão do tempo é buscada só até D+{DAYS_AHEAD}; as colunas "
               f"de previsão ficarão vazias de D+{DAYS_AHEAD + 1} em diante.", file=sys.stderr)
@@ -87,6 +107,17 @@ def main() -> None:
     with ThreadPoolExecutor(max_workers=max(1, min(ARENAS_EM_PARALELO, len(arenas)))) as executor:
         arena_by_future = {}
         for arena in arenas:
+            if days_from >= 1:
+                moment = local_now()
+                window = current_peak_window(moment)
+                morning, evening = peak_times_for_arena(
+                    arena_schedule_key(arena), moment.date()
+                )
+                chosen = morning if window == "morning" else evening
+                target = moment.replace(
+                    hour=chosen.hour, minute=chosen.minute, second=0, microsecond=0
+                )
+                sleep_seconds(max(0.0, (target - moment).total_seconds()))
             extractor = ArenaExtractor(
                 arena, visible_browser, days_from, days_ahead, arguments.proxy
             )
