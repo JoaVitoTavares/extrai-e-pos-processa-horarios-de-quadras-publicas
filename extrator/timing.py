@@ -17,3 +17,8 @@ def wait_between_accesses(sleeper=None, rng=None) -> float:
     seconds = random_access_interval_s(rng)
     (sleeper or time.sleep)(seconds)
     return seconds
+
+
+def wait_between_clicks(sleeper=None, rng=None) -> float:
+    """Pausa entre cliques e interações com o mesmo intervalo sorteado entre requisições."""
+    return wait_between_accesses(sleeper=sleeper, rng=rng)

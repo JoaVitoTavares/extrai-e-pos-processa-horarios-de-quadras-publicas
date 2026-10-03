@@ -26,6 +26,12 @@ from extrator.debug import debug
 from extrator.persistencia import sem_acento
 from extrator.timing import wait_between_accesses
 
+
+def click_with_pause(target, **kwargs):
+    """Espera o intervalo aleatório entre cliques e então dispara o clique no alvo."""
+    wait_between_accesses()
+    return target.click(**kwargs)
+
 # ---------------------------------------------------------------------------
 # Constantes de stealth / fingerprint
 # ---------------------------------------------------------------------------
@@ -201,7 +207,7 @@ def _arena_state(page, sport: str, timeout_ms: int) -> str:
 
 def _choose_sport(page, sport: str, timeout_ms: int = NAVIGATION_TIMEOUT_MS) -> bool:
     if _arena_state(page, sport, timeout_ms) == "escolher":
-        page.get_by_text(sport, exact=True).locator("visible=true").first.click()
+        click_with_pause(page.get_by_text(sport, exact=True).locator("visible=true").first)
     return _arena_state(page, "", timeout_ms) == "agenda"
 
 
@@ -210,20 +216,20 @@ def collection_days(today: date, days_ahead: int = DAYS_AHEAD, days_from: int = 
 
 
 def _try_day(page, label: str, timeout_ms: int) -> bool:
-    page.locator(".picker__input").first.click(timeout=timeout_ms)
+    click_with_pause(page.locator(".picker__input").first, timeout=timeout_ms)
     page.locator(".picker--opened").first.wait_for(state="attached", timeout=timeout_ms)
 
     cell = page.locator(f".picker__day[aria-label^='{label}']:not(.picker__day--disabled)")
     try:
         cell.first.wait_for(state="visible", timeout=CALENDAR_WAIT_MS)
     except PWTimeout:
-        page.locator(".picker__nav--next").first.click()
+        click_with_pause(page.locator(".picker__nav--next").first)
         try:
             cell.first.wait_for(state="visible", timeout=CALENDAR_WAIT_MS)
         except PWTimeout:
             return False
     page.wait_for_timeout(GRID_REPAINT_WAIT_MS)
-    cell.first.click()
+    click_with_pause(cell.first)
 
     try:
         page.wait_for_function(
@@ -270,7 +276,7 @@ def _period_selected(page, period: str) -> bool:
 
 def _select_period(page, period: str, previous_text: str, timeout_ms: int = 6_000) -> str:
     already_selected = _period_selected(page, period)
-    page.get_by_text(period, exact=True).first.click()
+    click_with_pause(page.get_by_text(period, exact=True).first)
     page.wait_for_function(
         PERIOD_SELECTED_SCRIPT, arg=_period_argument(period), timeout=timeout_ms
     )
@@ -354,7 +360,7 @@ def _collect_prices(root, schedules: list[dict]) -> None:
                 "xpath=following-sibling::div[contains(@class,'RepeatingGroup')]"
                 "//div[contains(@class,'group-item')]"
             )
-            header.click(timeout=3_000)
+            click_with_pause(header, timeout=3_000)
             try:
                 options.first.wait_for(state="attached", timeout=3_000)
             except PWTimeout:

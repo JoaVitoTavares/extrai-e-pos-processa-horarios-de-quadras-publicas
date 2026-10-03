@@ -122,3 +122,29 @@ def test_rodada_espera_antes_de_acessar_as_arenas(monkeypatch, tmp_path):
 
     assert ordem[0] == "espera-cron"
     assert ordem.index("espera-cron") < ordem.index("quadras")
+
+
+def test_pausa_entre_cliques_reusa_o_intervalo_entre_acessos(monkeypatch):
+    observados = []
+    monkeypatch.setattr(timing.time, "sleep", observados.append)
+    rng = random.Random(3)
+
+    segundos = timing.wait_between_clicks(rng=rng)
+
+    assert observados == [segundos]
+    assert config.ACCESS_INTERVAL_MIN_S <= segundos <= config.ACCESS_INTERVAL_MAX_S
+
+
+def test_clique_humano_espera_antes_de_clicar(monkeypatch):
+    ordem = []
+    monkeypatch.setattr(
+        courts_collector, "wait_between_accesses", lambda: ordem.append("espera")
+    )
+
+    class Alvo:
+        def click(self, **kwargs):
+            ordem.append(("clique", kwargs))
+
+    courts_collector.click_with_pause(Alvo(), timeout=1000)
+
+    assert ordem == ["espera", ("clique", {"timeout": 1000})]
