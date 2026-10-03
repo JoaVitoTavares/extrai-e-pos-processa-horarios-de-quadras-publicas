@@ -25,6 +25,7 @@ from extrator.config import (
 from extrator.debug import debug
 from extrator.persistencia import sem_acento
 from extrator.timing import wait_between_accesses
+from extrator.human import simulate_human_failure
 
 
 def click_with_pause(target, **kwargs):
@@ -491,6 +492,7 @@ def collect_schedules(
                         periods[0], date.today(), [], NO_SCHEDULE_WARNING
                     )
                 ]
+            simulate_human_failure(page, intended=page.locator("body"))
 
             address = extract_address(page, sport)
             debug(f"'{sport}': endereco lido: {address or '(vazio)'}")
