@@ -14,6 +14,7 @@ from extrator.config import (
 from extrator.courts_collector import proxy_launch_settings
 from extrator.debug import debug
 from extrator.persistencia import registrar_verificacao, slug
+from extrator.timing import wait_between_accesses
 
 
 def normalize_arena_info(arena: dict) -> dict:
@@ -71,6 +72,7 @@ def main() -> None:
         print(f"[AVISO] a previsão do tempo é buscada só até D+{DAYS_AHEAD}; as colunas "
               f"de previsão ficarão vazias de D+{DAYS_AHEAD + 1} em diante.", file=sys.stderr)
     arenas = [normalize_arena_info(configured_arena) for configured_arena in ARENAS]
+    wait_between_accesses()
 
     saved_paths = []
     arenas_with_results = 0

@@ -24,6 +24,7 @@ from extrator.config import (
 )
 from extrator.debug import debug
 from extrator.persistencia import sem_acento
+from extrator.timing import wait_between_accesses
 
 # ---------------------------------------------------------------------------
 # Constantes de stealth / fingerprint
@@ -149,6 +150,7 @@ def api_init_url(arena_url: str) -> str:
 
 
 def list_sports(arena_url: str) -> list[str]:
+    wait_between_accesses()
     response = requests.get(
         api_init_url(arena_url),
         params={"location": arena_url},
@@ -433,6 +435,7 @@ def collect_schedules(
     periods = [period] if period else DEFAULT_PERIODS
     proxy_settings = proxy_launch_settings(proxy)
     ua = user_agent or DEFAULT_USER_AGENT
+    wait_between_accesses()
 
     with sync_playwright() as p:
         debug(

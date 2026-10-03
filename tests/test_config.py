@@ -43,3 +43,8 @@ def test_toda_arena_procura_algum_tipo_de_quadra():
 
 def test_janela_do_clima_e_um_intervalo_valido():
     assert config.HORAS_ANTES_DA_RESERVA > config.HORAS_ATE_A_RESERVA > 0
+
+
+def test_intervalo_entre_acessos_cabe_em_tres_minutos():
+    assert 0 < config.ACCESS_INTERVAL_MIN_S < config.ACCESS_INTERVAL_MAX_S
+    assert config.ACCESS_INTERVAL_MAX_S == 3 * 60

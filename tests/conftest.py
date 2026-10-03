@@ -28,6 +28,12 @@ def argv_sem_os_argumentos_do_pytest(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["main.py"])
 
 
+@pytest.fixture(autouse=True)
+def sem_pausa_real_entre_acessos(monkeypatch):
+    """Evita que os testes esperem o intervalo aleatório de verdade."""
+    monkeypatch.setattr("extrator.timing.time.sleep", lambda segundos: None)
+
+
 @pytest.fixture
 def respostas(monkeypatch):
     chamadas = []
