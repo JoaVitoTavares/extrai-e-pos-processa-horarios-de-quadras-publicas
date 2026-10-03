@@ -43,7 +43,7 @@ def test_human_failures_draw_the_four_variants(monkeypatch):
         distractor = Target("wrong", page.log)
         seen.add(
             human.simulate_human_failure(
-                page, intended, distractor, rng=random.Random(i)
+                page, intended, distractor, rand_num_gen=random.Random(i)
             )
         )
     assert seen == {"wrong_click", "redo", "hover_hesitate", "overscroll"}
@@ -57,7 +57,7 @@ def test_wrong_click_goes_back_and_pauses_between_steps(monkeypatch):
     distractor = Target("wrong", page.log)
 
     kind = human.simulate_human_failure(
-        page, intended, distractor, rng=_fixed_rng("wrong_click")
+        page, intended, distractor, rand_num_gen=_fixed_rand_num_gen("wrong_click")
     )
 
     assert kind == "wrong_click"
@@ -71,7 +71,7 @@ def test_redo_goes_back_and_repeats_the_target(monkeypatch):
     intended = Target("right", page.log)
 
     kind = human.simulate_human_failure(
-        page, intended, rng=_fixed_rng("redo")
+        page, intended, rand_num_gen=_fixed_rand_num_gen("redo")
     )
 
     assert kind == "redo"
@@ -84,7 +84,7 @@ def test_hesitates_on_the_target_without_clicking(monkeypatch):
     intended = Target("right", page.log)
 
     kind = human.simulate_human_failure(
-        page, intended, rng=_fixed_rng("hover_hesitate")
+        page, intended, rand_num_gen=_fixed_rand_num_gen("hover_hesitate")
     )
 
     assert kind == "hover_hesitate"
@@ -96,7 +96,7 @@ def test_scrolls_past_and_returns(monkeypatch):
     monkeypatch.setattr(human, "wait_between_clicks", lambda: None)
     page = FakePage()
 
-    kind = human.simulate_human_failure(page, rng=_fixed_rng("overscroll"))
+    kind = human.simulate_human_failure(page, rand_num_gen=_fixed_rand_num_gen("overscroll"))
 
     assert kind == "overscroll"
     assert page.log[0][0] == "wheel"
@@ -105,7 +105,7 @@ def test_scrolls_past_and_returns(monkeypatch):
     assert page.log[1][2] < 0
 
 
-class _fixed_rng:
+class _fixed_rand_num_gen:
     def __init__(self, chosen):
         self.chosen = chosen
 

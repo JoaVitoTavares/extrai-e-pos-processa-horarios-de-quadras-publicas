@@ -7,9 +7,9 @@ from extrator.timing import wait_between_clicks
 HUMAN_FAILURES = ("wrong_click", "redo", "hover_hesitate", "overscroll")
 
 
-def simulate_human_failure(page, intended=None, distractor=None, rng=None) -> str:
+def simulate_human_failure(page, intended=None, distractor=None, rand_num_gen=None) -> str:
     """Sorteia uma das quatro falhas humanas e executa, com pausas entre os passos."""
-    generator = rng if rng is not None else random
+    generator = rand_num_gen if rand_num_gen is not None else random
     kind = generator.choice(HUMAN_FAILURES)
     if kind == "wrong_click":
         _click_wrong_and_back(page, distractor)

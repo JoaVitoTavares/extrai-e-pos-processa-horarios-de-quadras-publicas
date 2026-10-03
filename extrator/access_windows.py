@@ -34,17 +34,17 @@ def night_access_allowed(moment: datetime | None = None) -> bool:
     return (local.hour - NIGHT_START_HOUR) % NIGHT_ACCESS_EVERY_H == 0
 
 
-def broken_time_in_window(start_hour: int, end_hour: int, rng=None) -> time:
+def broken_time_in_window(start_hour: int, end_hour: int, rand_num_gen=None) -> time:
     """Sorteia um horário quebrado (minuto diferente de zero) dentro de [start_hour, end_hour)."""
-    generator = rng if rng is not None else random
+    generator = rand_num_gen if rand_num_gen is not None else random
     hour = generator.randrange(start_hour, end_hour)
     minute = generator.randint(1, 59)
     return time(hour, minute)
 
 
-def peak_times_for_arena(arena_key: str, day: date, rng=None) -> tuple[time, time]:
+def peak_times_for_arena(arena_key: str, day: date, rand_num_gen=None) -> tuple[time, time]:
     """Sorteia os dois horários de pico do dia para uma arena, estáveis no mesmo dia."""
-    generator = rng if rng is not None else random.Random(f"{arena_key}:{day.isoformat()}")
+    generator = rand_num_gen if rand_num_gen is not None else random.Random(f"{arena_key}:{day.isoformat()}")
     morning = broken_time_in_window(PEAK_MORNING_START_HOUR, PEAK_MORNING_END_HOUR, generator)
     evening = broken_time_in_window(PEAK_EVENING_START_HOUR, PEAK_EVENING_END_HOUR, generator)
     return morning, evening

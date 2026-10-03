@@ -47,9 +47,9 @@ ACCESS_PROFILES = [
 ]
 
 
-def draw_access_profile(rng=None) -> dict:
+def draw_access_profile(rand_num_gen=None) -> dict:
     """Sorteia um perfil coerente: User-Agent e viewport do mesmo sistema."""
-    generator = rng if rng is not None else random
+    generator = rand_num_gen if rand_num_gen is not None else random
     profile = generator.choice(ACCESS_PROFILES)
     viewport = generator.choice(profile["viewports"])
     user_agent = generator.choice(profile["user_agents"])

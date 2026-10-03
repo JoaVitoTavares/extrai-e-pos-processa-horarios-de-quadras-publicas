@@ -21,10 +21,10 @@ def _moment(hour, minute=0):
 
 
 def test_broken_time_stays_inside_the_window_and_off_the_hour():
-    rng = __import__("random").Random(0)
+    rand_num_gen = __import__("random").Random(0)
     for _ in range(200):
-        morning = access_windows.broken_time_in_window(7, 9, rng)
-        evening = access_windows.broken_time_in_window(17, 20, rng)
+        morning = access_windows.broken_time_in_window(7, 9, rand_num_gen)
+        evening = access_windows.broken_time_in_window(17, 20, rand_num_gen)
         assert time(7, 1) <= morning < time(9, 0)
         assert morning.minute != 0
         assert time(17, 1) <= evening < time(20, 0)
@@ -114,7 +114,7 @@ def test_next_day_waits_until_the_arenas_broken_time(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "current_peak_window", lambda moment=None: "morning")
     monkeypatch.setattr(
         main, "peak_times_for_arena",
-        lambda arena_key, day, rng=None: (target, time(17, 22)),
+        lambda arena_key, day, rand_num_gen=None: (target, time(17, 22)),
     )
     monkeypatch.setattr(main, "local_now", lambda moment=None: now)
     sleeps = []

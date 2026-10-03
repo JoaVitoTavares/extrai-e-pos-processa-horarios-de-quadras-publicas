@@ -18,8 +18,8 @@ ESPORTES = ["Grama 7", "Grama 5"]
 
 
 def test_intervalo_fica_entre_alguns_segundos_e_tres_minutos():
-    rng = random.Random(0)
-    amostras = [timing.random_access_interval_s(rng) for _ in range(500)]
+    rand_num_gen = random.Random(0)
+    amostras = [timing.random_access_interval_s(rand_num_gen) for _ in range(500)]
 
     assert config.ACCESS_INTERVAL_MIN_S >= 3
     assert config.ACCESS_INTERVAL_MAX_S == 3 * 60
@@ -31,9 +31,9 @@ def test_intervalo_fica_entre_alguns_segundos_e_tres_minutos():
 def test_espera_dorme_o_intervalo_sorteado(monkeypatch):
     observados = []
     monkeypatch.setattr(timing.time, "sleep", observados.append)
-    rng = random.Random(1)
+    rand_num_gen = random.Random(1)
 
-    segundos = timing.wait_between_accesses(rng=rng)
+    segundos = timing.wait_between_accesses(rand_num_gen=rand_num_gen)
 
     assert observados == [segundos]
     assert config.ACCESS_INTERVAL_MIN_S <= segundos <= config.ACCESS_INTERVAL_MAX_S
@@ -127,9 +127,9 @@ def test_rodada_espera_antes_de_acessar_as_arenas(monkeypatch, tmp_path):
 def test_click_pause_reuses_the_access_interval(monkeypatch):
     observed = []
     monkeypatch.setattr(timing.time, "sleep", observed.append)
-    rng = random.Random(3)
+    rand_num_gen = random.Random(3)
 
-    seconds = timing.wait_between_clicks(rng=rng)
+    seconds = timing.wait_between_clicks(rand_num_gen=rand_num_gen)
 
     assert observed == [seconds]
     assert config.ACCESS_INTERVAL_MIN_S <= seconds <= config.ACCESS_INTERVAL_MAX_S

@@ -23,10 +23,10 @@ def test_draw_picks_a_viewport_from_some_profile():
         for profile in profiles.ACCESS_PROFILES
         for item in profile["viewports"]
     }
-    rng = random.Random(0)
+    rand_num_gen = random.Random(0)
     chosen = {
         (profile["viewport"]["width"], profile["viewport"]["height"])
-        for profile in [profiles.draw_access_profile(rng) for _ in range(50)]
+        for profile in [profiles.draw_access_profile(rand_num_gen) for _ in range(50)]
     }
 
     assert chosen <= allowed
@@ -49,9 +49,9 @@ def test_list_has_between_eight_and_twelve_desktop_chrome_user_agents():
 
 
 def test_user_agent_only_matches_a_viewport_of_the_same_system():
-    rng = random.Random(2)
+    rand_num_gen = random.Random(2)
     for _ in range(80):
-        profile = profiles.draw_access_profile(rng)
+        profile = profiles.draw_access_profile(rand_num_gen)
         source = next(item for item in profiles.ACCESS_PROFILES if item["system"] == profile["system"])
         assert profile["user_agent"] in source["user_agents"]
         assert profile["viewport"] in source["viewports"]
