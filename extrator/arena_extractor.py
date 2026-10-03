@@ -12,6 +12,8 @@ from extrator.courts_collector import (
 )
 from extrator.localizacao import endereco_observado, resolver_local
 from extrator.persistencia import salvar_extracao
+from extrator.profiles import draw_access_profile
+from extrator.email_config import send_alert
 from extrator.tratamento import TratamentoDeDados
 from extrator.weather_collector import record_forecast, record_weather
 
@@ -70,6 +72,10 @@ class ArenaExtractor:
             court_names = self.verified_court_names(results)
         except (PWTimeout, requests.RequestException, ValueError) as error:
             print(f"[AVISO] arena '{self.arena['nome']}' pulada: {error}", file=sys.stderr)
+            send_alert(
+                f"Falha na extração de {self.arena['nome']}",
+                str(error),
+            )
             paths, court_names = [], []
         return paths, court_names, self.output.getvalue()
 
@@ -90,6 +96,7 @@ class ArenaExtractor:
                   file=self.output)
 
         results = []
+        profile = draw_access_profile()
         for sport in target_sports:
             print(f"\n>> TÉCNICA 2 (Playwright): horários de '{sport}' (todos os períodos)...",
                   file=self.output)
@@ -105,12 +112,17 @@ class ArenaExtractor:
                     proxy=self.proxy,
                     use_stealth=self.use_stealth,
                     slow_mo=self.slow_mo,
-                    user_agent=self.user_agent,
+                    user_agent=self.user_agent or profile["user_agent"],
+                    viewport=profile["viewport"],
                 )
                 results.extend(sport_results)
             except PWTimeout as error:
                 print(f"[AVISO] {self.arena['nome']}: '{sport}' pulado por tempo esgotado: {error}",
                       file=sys.stderr)
+                send_alert(
+                    f"Falha em {self.arena['nome']} ({sport})",
+                    str(error),
+                )
         return results
 
     def _record_location(self, results: list[dict]) -> dict | None:
@@ -125,6 +137,10 @@ class ArenaExtractor:
         except (requests.RequestException, ValueError) as error:
             print(f"[AVISO] {self.arena['nome']}: endereço não geocodificado: {error}",
                   file=sys.stderr)
+            send_alert(
+                f"Falha de endereço em {self.arena['nome']}",
+                str(error),
+            )
             return None
 
         if location is None:

@@ -25,6 +25,16 @@ from extrator.config import (
 from extrator.debug import debug
 from extrator.persistencia import sem_acento
 from extrator.timing import wait_between_accesses
+from extrator.human import simulate_human_failure
+from extrator.captcha import captcha_detected
+from extrator.email_config import send_alert
+from extrator.pause import CaptchaPause, engage_captcha_pause, is_paused
+
+
+def click_with_pause(target, **kwargs):
+    """Espera o intervalo aleatório entre cliques e então dispara o clique no alvo."""
+    wait_between_accesses()
+    return target.click(**kwargs)
 
 # ---------------------------------------------------------------------------
 # Constantes de stealth / fingerprint
@@ -201,7 +211,7 @@ def _arena_state(page, sport: str, timeout_ms: int) -> str:
 
 def _choose_sport(page, sport: str, timeout_ms: int = NAVIGATION_TIMEOUT_MS) -> bool:
     if _arena_state(page, sport, timeout_ms) == "escolher":
-        page.get_by_text(sport, exact=True).locator("visible=true").first.click()
+        click_with_pause(page.get_by_text(sport, exact=True).locator("visible=true").first)
     return _arena_state(page, "", timeout_ms) == "agenda"
 
 
@@ -210,20 +220,20 @@ def collection_days(today: date, days_ahead: int = DAYS_AHEAD, days_from: int = 
 
 
 def _try_day(page, label: str, timeout_ms: int) -> bool:
-    page.locator(".picker__input").first.click(timeout=timeout_ms)
+    click_with_pause(page.locator(".picker__input").first, timeout=timeout_ms)
     page.locator(".picker--opened").first.wait_for(state="attached", timeout=timeout_ms)
 
     cell = page.locator(f".picker__day[aria-label^='{label}']:not(.picker__day--disabled)")
     try:
         cell.first.wait_for(state="visible", timeout=CALENDAR_WAIT_MS)
     except PWTimeout:
-        page.locator(".picker__nav--next").first.click()
+        click_with_pause(page.locator(".picker__nav--next").first)
         try:
             cell.first.wait_for(state="visible", timeout=CALENDAR_WAIT_MS)
         except PWTimeout:
             return False
     page.wait_for_timeout(GRID_REPAINT_WAIT_MS)
-    cell.first.click()
+    click_with_pause(cell.first)
 
     try:
         page.wait_for_function(
@@ -270,7 +280,7 @@ def _period_selected(page, period: str) -> bool:
 
 def _select_period(page, period: str, previous_text: str, timeout_ms: int = 6_000) -> str:
     already_selected = _period_selected(page, period)
-    page.get_by_text(period, exact=True).first.click()
+    click_with_pause(page.get_by_text(period, exact=True).first)
     page.wait_for_function(
         PERIOD_SELECTED_SCRIPT, arg=_period_argument(period), timeout=timeout_ms
     )
@@ -354,7 +364,7 @@ def _collect_prices(root, schedules: list[dict]) -> None:
                 "xpath=following-sibling::div[contains(@class,'RepeatingGroup')]"
                 "//div[contains(@class,'group-item')]"
             )
-            header.click(timeout=3_000)
+            click_with_pause(header, timeout=3_000)
             try:
                 options.first.wait_for(state="attached", timeout=3_000)
             except PWTimeout:
@@ -423,6 +433,7 @@ def collect_schedules(
     use_stealth: bool = True,
     slow_mo: int = 50,
     user_agent: str | None = None,
+    viewport: dict | None = None,
 ) -> list[dict]:
     """
     Coleta horários com proteção anti-bot (stealth + fingerprint).
@@ -432,9 +443,12 @@ def collect_schedules(
         slow_mo: atraso em ms entre ações do Playwright (ajuda a parecer humano)
         user_agent: sobrescreve o User-Agent padrão
     """
+    if is_paused():
+        raise CaptchaPause("coleta pausada por captcha")
     periods = [period] if period else DEFAULT_PERIODS
     proxy_settings = proxy_launch_settings(proxy)
     ua = user_agent or DEFAULT_USER_AGENT
+    screen = viewport or {"width": 1920, "height": 1080}
     wait_between_accesses()
 
     with sync_playwright() as p:
@@ -454,7 +468,7 @@ def collect_schedules(
         # Context com fingerprint mais realista
         context = browser.new_context(
             user_agent=ua,
-            viewport={"width": 1920, "height": 1080},
+            viewport=screen,
             locale="pt-BR",
             timezone_id="America/Sao_Paulo",
             # color_scheme="light",
@@ -474,6 +488,13 @@ def collect_schedules(
 
         try:
             page.goto(arena_url, wait_until="networkidle", timeout=60_000)
+            if captcha_detected(page):
+                send_alert(
+                    "Captcha detectado na extração",
+                    f"A frase 'não sou um robô' apareceu em {arena_url} ({sport}).",
+                )
+                engage_captcha_pause()
+                raise CaptchaPause("captcha detectado")
             debug(f"'{sport}': pagina carregada, escolhendo esporte")
 
             if not _choose_sport(page, sport):
@@ -483,6 +504,7 @@ def collect_schedules(
                         periods[0], date.today(), [], NO_SCHEDULE_WARNING
                     )
                 ]
+            simulate_human_failure(page, intended=page.locator("body"))
 
             address = extract_address(page, sport)
             debug(f"'{sport}': endereco lido: {address or '(vazio)'}")
@@ -492,6 +514,8 @@ def collect_schedules(
             results = []
 
             for index, day in enumerate(days):
+                if is_paused():
+                    raise CaptchaPause("coleta pausada por captcha")
                 debug(f"'{sport}': dia {index + 1}/{len(days)} ({day.isoformat()})")
                 try:
                     _select_day(page, day)
