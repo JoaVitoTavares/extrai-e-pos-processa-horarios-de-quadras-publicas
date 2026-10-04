@@ -29,6 +29,43 @@ def test_without_a_lock_file_it_is_not_paused(tmp_path, monkeypatch):
     assert pause.is_paused(datetime(2026, 10, 3, 10, 0, tzinfo=ZONE)) is False
 
 
+def test_blank_lock_file_is_not_paused(tmp_path, monkeypatch):
+    path = tmp_path / "lock"
+    path.write_text("  \n", encoding="utf-8")
+    monkeypatch.setattr(pause, "pause_lock_path", lambda: str(path))
+
+    assert pause.is_paused(datetime(2026, 10, 3, 10, 0, tzinfo=ZONE)) is False
+
+
+def test_naive_lock_is_read_in_sao_paulo_time(tmp_path, monkeypatch):
+    path = tmp_path / "lock"
+    path.write_text("2026-10-03T12:00:00", encoding="utf-8")
+    monkeypatch.setattr(pause, "pause_lock_path", lambda: str(path))
+
+    assert pause.is_paused(datetime(2026, 10, 3, 11, 59, tzinfo=ZONE)) is True
+    assert pause.is_paused(datetime(2026, 10, 3, 12, 0, tzinfo=ZONE)) is False
+
+
+def test_utc_lock_is_compared_in_sao_paulo_time(tmp_path, monkeypatch):
+    path = tmp_path / "lock"
+    path.write_text("2026-10-03T15:00:00+00:00", encoding="utf-8")
+    monkeypatch.setattr(pause, "pause_lock_path", lambda: str(path))
+
+    assert pause.is_paused(datetime(2026, 10, 3, 11, 59, tzinfo=ZONE)) is True
+    assert pause.is_paused(datetime(2026, 10, 3, 12, 0, tzinfo=ZONE)) is False
+
+
+def test_paused_collection_does_not_open_the_browser(monkeypatch):
+    opened = []
+    monkeypatch.setattr(courts_collector, "is_paused", lambda moment=None: True)
+    monkeypatch.setattr(courts_collector, "sync_playwright", lambda: opened.append("browser"))
+
+    with pytest.raises(pause.CaptchaPause):
+        courts_collector.collect_schedules("Grama 5", "https://webarena.app/arena/x")
+
+    assert opened == []
+
+
 def test_round_stops_while_the_lock_is_still_active(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(main, "is_paused", lambda moment=None: True)
     monkeypatch.setattr(main, "ARENAS", [ARENA])

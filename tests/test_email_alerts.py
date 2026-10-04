@@ -59,6 +59,96 @@ def test_without_a_configured_server_it_does_not_send():
     )
 
 
+def test_without_a_recipient_it_does_not_open_smtp(monkeypatch):
+    opened = []
+
+    class FakeSMTP:
+        def __init__(self, host, port):
+            opened.append(host)
+
+    monkeypatch.setattr(email_config.smtplib, "SMTP", FakeSMTP)
+    email_config.send_alert(
+        "x", "y",
+        settings={
+            "host": "smtp.exemplo.com",
+            "port": 587,
+            "user": "aviso@exemplo.com",
+            "password": "segredo",
+            "recipient": "",
+        },
+    )
+
+    assert opened == []
+
+
+def test_empty_port_and_user_use_submission_port_without_login(monkeypatch):
+    sent = []
+
+    class FakeSMTP:
+        def __init__(self, host, port):
+            sent.append(("connect", host, port))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def starttls(self):
+            return None
+
+        def login(self, user, password):
+            sent.append(("login", user, password))
+
+        def send_message(self, message):
+            sent.append(("from", message["From"]))
+
+    monkeypatch.setattr(email_config.smtplib, "SMTP", FakeSMTP)
+    email_config.send_alert(
+        "assunto",
+        "corpo",
+        settings={
+            "host": "smtp.exemplo.com",
+            "port": "",
+            "user": "",
+            "password": "",
+            "recipient": "destino@exemplo.com",
+        },
+    )
+
+    assert ("connect", "smtp.exemplo.com", 587) in sent
+    assert ("from", "destino@exemplo.com") in sent
+    assert not any(item[0] == "login" for item in sent if isinstance(item, tuple))
+
+
+def test_smtp_outage_does_not_raise(monkeypatch):
+    class FakeSMTP:
+        def __init__(self, host, port):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def starttls(self):
+            raise OSError("tls indisponivel")
+
+    monkeypatch.setattr(email_config.smtplib, "SMTP", FakeSMTP)
+    email_config.send_alert(
+        "assunto",
+        "corpo",
+        settings={
+            "host": "smtp.exemplo.com",
+            "port": 587,
+            "user": "aviso@exemplo.com",
+            "password": "segredo",
+            "recipient": "destino@exemplo.com",
+        },
+    )
+
+
 def test_captcha_triggers_one_email(monkeypatch):
     alerts = []
     monkeypatch.setattr(courts_collector, "send_alert", lambda *a, **k: alerts.append(a))
