@@ -5,12 +5,18 @@ import random
 from extrator.timing import wait_between_clicks
 
 HUMAN_FAILURES = ("wrong_click", "redo", "hover_hesitate", "overscroll")
+ON_PAGE_FAILURES = ("hover_hesitate", "overscroll")
 
 
-def simulate_human_failure(page, intended=None, distractor=None, rand_num_gen=None) -> str:
-    """Sorteia uma das quatro falhas humanas e executa, com pausas entre os passos."""
+def simulate_human_failure(
+    page, intended=None, distractor=None, rand_num_gen=None, stay_on_page=False
+) -> str:
+    """Sorteia uma falha humana e executa, com pausas entre os passos. Com
+    `stay_on_page`, limita o sorteio a hesitação e rolagem, sem voltar no
+    histórico da página."""
     generator = rand_num_gen if rand_num_gen is not None else random
-    kind = generator.choice(HUMAN_FAILURES)
+    options = ON_PAGE_FAILURES if stay_on_page else HUMAN_FAILURES
+    kind = generator.choice(options)
     if kind == "wrong_click":
         _click_wrong_and_back(page, distractor)
     elif kind == "redo":
