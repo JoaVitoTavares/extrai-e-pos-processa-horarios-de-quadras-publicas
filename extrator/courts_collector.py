@@ -504,7 +504,7 @@ def collect_schedules(
                         periods[0], date.today(), [], NO_SCHEDULE_WARNING
                     )
                 ]
-            simulate_human_failure(page, intended=page.locator("body"))
+            simulate_human_failure(page, stay_on_page=True)
 
             address = extract_address(page, sport)
             debug(f"'{sport}': endereco lido: {address or '(vazio)'}")
