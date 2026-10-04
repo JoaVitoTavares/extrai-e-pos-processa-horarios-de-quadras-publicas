@@ -48,3 +48,32 @@ def test_loads_env_file_without_sending(tmp_path, monkeypatch):
 
     assert os.environ["EMAIL_SMTP_HOST"] == "smtp.local"
     assert os.environ["EMAIL_SMTP_PORT"] == "465"
+
+
+def test_dotenv_skips_comments_and_does_not_override(tmp_path, monkeypatch):
+    path = tmp_path / ".env"
+    path.write_text(
+        "\n# comentario\nSEM_IGUAL\nEMAIL_SMTP_HOST=\"smtp.quoted\"\nEMAIL_TO='dest@ex.com'\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("EMAIL_SMTP_HOST", "ja-definido")
+    monkeypatch.delenv("EMAIL_TO", raising=False)
+
+    email_config.load_dotenv(path)
+
+    assert os.environ["EMAIL_SMTP_HOST"] == "ja-definido"
+    assert os.environ["EMAIL_TO"] == "dest@ex.com"
+
+
+def test_missing_env_file_leaves_the_environment_alone(tmp_path, monkeypatch):
+    monkeypatch.delenv("EMAIL_TO", raising=False)
+
+    email_config.load_dotenv(tmp_path / "ausente.env")
+
+    assert "EMAIL_TO" not in os.environ
+
+
+def test_non_numeric_port_stays_text(monkeypatch):
+    monkeypatch.setenv("EMAIL_SMTP_PORT", "smtp")
+
+    assert email_config.email_settings()["port"] == "smtp"
