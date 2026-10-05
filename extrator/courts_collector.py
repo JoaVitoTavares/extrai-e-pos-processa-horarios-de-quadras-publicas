@@ -24,7 +24,7 @@ from extrator.config import (
 )
 from extrator.debug import debug
 from extrator.persistencia import sem_acento
-from extrator.timing import wait_between_accesses
+from extrator.timing import wait_between_accesses, wait_between_clicks
 from extrator.human import simulate_human_failure
 from extrator.captcha import captcha_detected
 from extrator.email_config import send_alert
@@ -32,8 +32,8 @@ from extrator.pause import CaptchaPause, engage_captcha_pause, is_paused
 
 
 def click_with_pause(target, **kwargs):
-    """Espera o intervalo aleatório entre cliques e então dispara o clique no alvo."""
-    wait_between_accesses()
+    """Espera o intervalo curto entre cliques e então dispara o clique no alvo."""
+    wait_between_clicks()
     return target.click(**kwargs)
 
 # ---------------------------------------------------------------------------

@@ -17,14 +17,22 @@ ARENA_URL = "https://webarena.app/arena/sp-sports"
 ESPORTES = ["Grama 7", "Grama 5"]
 
 
-def test_intervalo_fica_entre_alguns_segundos_e_tres_minutos():
+def test_intervalo_de_acesso_fica_dentro_do_config():
     rand_num_gen = random.Random(0)
     amostras = [timing.random_access_interval_s(rand_num_gen) for _ in range(500)]
 
-    assert config.ACCESS_INTERVAL_MIN_S >= 3
-    assert config.ACCESS_INTERVAL_MAX_S == 3 * 60
     assert min(amostras) >= config.ACCESS_INTERVAL_MIN_S
     assert max(amostras) <= config.ACCESS_INTERVAL_MAX_S
+    assert min(amostras) < max(amostras)
+
+
+def test_intervalo_de_clique_fica_em_fracao_de_segundo():
+    rand_num_gen = random.Random(0)
+    amostras = [timing.random_click_interval_s(rand_num_gen) for _ in range(500)]
+
+    assert config.CLICK_INTERVAL_MAX_S < 1
+    assert min(amostras) >= config.CLICK_INTERVAL_MIN_S
+    assert max(amostras) <= config.CLICK_INTERVAL_MAX_S
     assert min(amostras) < max(amostras)
 
 
@@ -124,7 +132,7 @@ def test_rodada_espera_antes_de_acessar_as_arenas(monkeypatch, tmp_path):
     assert ordem.index("espera-cron") < ordem.index("quadras")
 
 
-def test_click_pause_reuses_the_access_interval(monkeypatch):
+def test_click_pause_uses_the_short_click_interval(monkeypatch):
     observed = []
     monkeypatch.setattr(timing.time, "sleep", observed.append)
     rand_num_gen = random.Random(3)
@@ -132,13 +140,14 @@ def test_click_pause_reuses_the_access_interval(monkeypatch):
     seconds = timing.wait_between_clicks(rand_num_gen=rand_num_gen)
 
     assert observed == [seconds]
-    assert config.ACCESS_INTERVAL_MIN_S <= seconds <= config.ACCESS_INTERVAL_MAX_S
+    assert config.CLICK_INTERVAL_MIN_S <= seconds <= config.CLICK_INTERVAL_MAX_S
+    assert seconds < config.ACCESS_INTERVAL_MIN_S
 
 
 def test_human_click_waits_before_clicking(monkeypatch):
     order = []
     monkeypatch.setattr(
-        courts_collector, "wait_between_accesses", lambda: order.append("wait")
+        courts_collector, "wait_between_clicks", lambda: order.append("wait")
     )
 
     class Target:
