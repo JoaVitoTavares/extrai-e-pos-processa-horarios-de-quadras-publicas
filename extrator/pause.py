@@ -27,6 +27,7 @@ def engage_captcha_pause(moment: datetime | None = None) -> datetime:
 
 
 def is_paused(moment: datetime | None = None) -> bool:
+    """Diz se a trava de captcha ainda vale. Arquivo ausente, vazio ou ilegível não pausa."""
     path = pause_lock_path()
     if not os.path.isfile(path):
         return False
@@ -34,7 +35,10 @@ def is_paused(moment: datetime | None = None) -> bool:
         text = lock_file.read().strip()
     if not text:
         return False
-    until = datetime.fromisoformat(text)
+    try:
+        until = datetime.fromisoformat(text)
+    except ValueError:
+        return False
     if until.tzinfo is None:
         until = until.replace(tzinfo=ZoneInfo(FUSO_HORARIO))
     return local_now(moment) < until
