@@ -38,7 +38,8 @@ def email_settings(environ=None) -> dict:
 
 
 def send_alert(subject: str, body: str, settings: dict | None = None) -> None:
-    """Envia um e-mail de aviso para uma falha. Sem servidor ou destinatário, não faz nada."""
+    """Envia um e-mail de aviso para uma falha. Sem servidor, destinatário ou porta
+    válida, ou com o SMTP fora do ar, não faz nada e não interrompe a extração."""
     cfg = settings if settings is not None else email_settings()
     if not cfg["host"] or not cfg["recipient"]:
         return
@@ -49,7 +50,11 @@ def send_alert(subject: str, body: str, settings: dict | None = None) -> None:
     message.set_content(body)
     port = cfg["port"] or 587
     try:
-        with smtplib.SMTP(cfg["host"], int(port)) as smtp:
+        smtp_port = int(port)
+    except ValueError:
+        return
+    try:
+        with smtplib.SMTP(cfg["host"], smtp_port) as smtp:
             smtp.starttls()
             if cfg["user"]:
                 smtp.login(cfg["user"], cfg["password"] or "")

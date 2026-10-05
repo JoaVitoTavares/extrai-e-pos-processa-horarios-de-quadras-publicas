@@ -59,6 +59,36 @@ def test_without_a_configured_server_it_does_not_send():
     )
 
 
+def test_non_numeric_port_does_not_open_smtp(monkeypatch):
+    opened = []
+
+    class FakeSMTP:
+        def __init__(self, host, port):
+            opened.append(port)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(email_config.smtplib, "SMTP", FakeSMTP)
+
+    email_config.send_alert(
+        "assunto",
+        "corpo",
+        settings={
+            "host": "smtp.exemplo.com",
+            "port": "smtp",
+            "user": "",
+            "password": "",
+            "recipient": "destino@exemplo.com",
+        },
+    )
+
+    assert opened == []
+
+
 def test_captcha_triggers_one_email(monkeypatch):
     alerts = []
     monkeypatch.setattr(courts_collector, "send_alert", lambda *a, **k: alerts.append(a))
