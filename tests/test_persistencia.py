@@ -106,6 +106,28 @@ def test_colunas_da_reserva_ficam_juntas_do_carimbo_da_coleta():
     ]
 
 
+def test_esporte_seguinte_nao_apaga_o_horario_do_outro(tmp_path):
+    caminho = persistencia.salvar_extracao(
+        [quadra("Quadra 1", [{"hora": "17:00", "status": "Livre"}])],
+        str(tmp_path), AGORA,
+    )[0]
+    persistencia.salvar_extracao(
+        [dict(
+            quadra("Quadra 1", [{"hora": "17:00", "status": "Indisponível"}]),
+            esporte="Futebol de salão",
+        )],
+        str(tmp_path),
+        datetime(2026, 8, 7, 9, 0),
+    )
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False).set_index("esporte")
+
+    assert len(df) == 2
+    assert df.loc["Vôlei de praia", "status"] == "Livre"
+    assert df.loc["Vôlei de praia", "ultima_atualizacao"] == "2026-08-07T08:00:00"
+    assert df.loc["Futebol de salão", "status"] == "Indisponível"
+    assert df.loc["Futebol de salão", "ultima_atualizacao"] == "2026-08-07T09:00:00"
+
+
 def test_mesmo_horario_em_quadras_diferentes_vira_duas_linhas():
     resultados = [
         quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre", "valor": 100.0}]),

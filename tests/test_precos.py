@@ -3,6 +3,7 @@
 from datetime import date
 
 import pytest
+from playwright.sync_api import TimeoutError as PWTimeout
 
 from extrator import courts_collector
 
@@ -58,3 +59,123 @@ def test_indisponivel_fica_sem_valor(quadras_com_precos):
 
     indisponivel = next(h for h in quadra["horarios"] if h["status"] == "Indisponível")
     assert "valor" not in indisponivel
+
+
+class _NoSlot:
+    def __init__(self, hour, fail):
+        self.hour = hour
+        self.fail = fail
+
+    @property
+    def first(self):
+        return self
+
+    def locator(self, xpath):
+        if self.fail and "ancestor" in xpath:
+            raise PWTimeout("sem o slot")
+        return self
+
+    def click(self, **kwargs):
+        if self.fail:
+            raise PWTimeout("clique")
+
+    def wait_for(self, **kwargs):
+        return None
+
+    def all_text_contents(self):
+        return ["60 min. R$ 80,00"]
+
+    def text_content(self):
+        return ""
+
+
+class _PriceRoot:
+    def get_by_text(self, hour, exact=True):
+        return _NoSlot(hour, fail=hour == "17:00")
+
+
+def test_clique_que_estoura_o_tempo_nao_impede_o_proximo_preco():
+    horarios = [
+        {"hora": "17:00", "status": "Livre"},
+        {"hora": "18:00", "status": "Livre"},
+    ]
+
+    courts_collector._collect_prices(_PriceRoot(), horarios)
+
+    assert "valor" not in horarios[0]
+    assert horarios[1]["valor"] == 80.0
+
+
+class _Hoje(date):
+    @classmethod
+    def today(cls):
+        return date(2026, 8, 7)
+
+
+class _Browser:
+    def launch(self, **kwargs):
+        return self
+
+    def new_context(self, **kwargs):
+        return self
+
+    def new_page(self):
+        return self
+
+    def goto(self, *args, **kwargs):
+        return None
+
+    def locator(self, selector):
+        return self
+
+    def close(self):
+        return None
+
+
+class _Playwright:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    @property
+    def chromium(self):
+        return _Browser()
+
+
+def test_preco_so_no_dia_de_hoje_e_dia_perdido_nao_apaga_os_outros(monkeypatch):
+    chamadas = []
+    monkeypatch.setattr(courts_collector, "date", _Hoje)
+    monkeypatch.setattr(courts_collector, "STEALTH_AVAILABLE", False)
+    monkeypatch.setattr(courts_collector, "captcha_detected", lambda page: False)
+    monkeypatch.setattr(courts_collector, "_choose_sport", lambda *args, **kwargs: True)
+    monkeypatch.setattr(courts_collector, "simulate_human_failure", lambda *args, **kwargs: None)
+    monkeypatch.setattr(courts_collector, "extract_address", lambda *args, **kwargs: "Rua 1, Canoas")
+    monkeypatch.setattr(courts_collector, "sync_playwright", lambda: _Playwright())
+
+    def selecionar_dia(page, day, timeout_ms=30_000, attempts=3):
+        if day == date(2026, 8, 8):
+            raise PWTimeout("calendário")
+
+    def coletar_dia(page, sport, day, periods, with_price, types):
+        chamadas.append((day, with_price, periods))
+        return [{"quadra": "Areia 1", "horarios": [], "aviso": None, "data": day.isoformat()}]
+
+    monkeypatch.setattr(courts_collector, "_select_day", selecionar_dia)
+    monkeypatch.setattr(courts_collector, "_collect_day", coletar_dia)
+
+    resultados = courts_collector.collect_schedules(
+        "Vôlei de praia",
+        "https://webarena.app/arena/x",
+        period="Noite",
+        days_from=0,
+        days_ahead=2,
+    )
+
+    assert chamadas == [
+        (date(2026, 8, 7), True, ["Noite"]),
+        (date(2026, 8, 9), False, ["Noite"]),
+    ]
+    assert [item["data"] for item in resultados] == ["2026-08-07", "2026-08-09"]
+    assert {item["endereco"] for item in resultados} == {"Rua 1, Canoas"}

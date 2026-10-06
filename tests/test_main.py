@@ -220,6 +220,32 @@ def test_falha_no_clima_nao_derruba_a_execucao(monkeypatch, capsys):
     assert "clima não coletado" in capsys.readouterr().err
 
 
+def test_falha_na_previsao_nao_descarta_a_extracao_ja_gravada(monkeypatch, capsys):
+    monkeypatch.setattr(
+        arena_extractor.ArenaExtractor, "_collect_courts",
+        lambda self: [quadra(horarios=[{"hora": "20:00", "status": "Livre"}])],
+    )
+    monkeypatch.setattr(
+        weather_collector, "collect_forecast", _que_falha(requests.ConnectionError("sem rede"))
+    )
+
+    main.main()
+
+    assert "previsão não coletada" in capsys.readouterr().err
+
+
+def test_ate_alem_do_horizonte_avisa_que_a_previsao_fica_vazia(monkeypatch, capsys):
+    monkeypatch.setattr("sys.argv", ["main.py", "--ate", str(main.DAYS_AHEAD + 1)])
+    monkeypatch.setattr(
+        arena_extractor.ArenaExtractor, "_collect_courts",
+        lambda self: [quadra(horarios=[{"hora": "20:00", "status": "Livre"}])],
+    )
+
+    main.main()
+
+    assert f"D+{main.DAYS_AHEAD}" in capsys.readouterr().err
+
+
 def test_json_de_clima_invalido_tambem_e_tolerado(monkeypatch, capsys):
     monkeypatch.setattr(weather_collector, "collect_weather", _que_falha(ValueError("sem o bloco 'current'")))
 

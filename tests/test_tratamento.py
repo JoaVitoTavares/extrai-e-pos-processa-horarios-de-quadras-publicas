@@ -168,6 +168,19 @@ def test_sem_leitura_de_clima_nada_e_tocado(tmp_path):
     assert (tmp_path / "areia-1-interna-extracoes.csv").read_text(encoding="utf-8") == antes
 
 
+def test_leitura_com_data_ilegivel_nao_impede_a_valida(extracoes):
+    caminho = extracoes / weather_collector.WEATHER_FILE
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+    ruim = df.iloc[0].copy()
+    ruim["data_hora"] = "nao-e-data"
+    ruim["clima"] = "Trovoada"
+    pd.concat([pd.DataFrame([ruim]), df], ignore_index=True).to_csv(caminho, index=False)
+
+    TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 16, 30))
+
+    assert reservas(extracoes).loc[0, "antes_do_jogo_clima"] == "Encoberto"
+
+
 def test_leitura_velha_demais_e_ignorada(extracoes):
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 19, 0))
 
