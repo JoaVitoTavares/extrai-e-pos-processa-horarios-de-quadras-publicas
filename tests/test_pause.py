@@ -9,7 +9,7 @@ from extrator import pause
 from extrator import courts_collector
 from extrator import arena_extractor
 import main
-from test_main import ARENA, quadra
+from test_main import ARENA, OUTRA_ARENA, quadra
 
 ZONE = ZoneInfo("America/Sao_Paulo")
 
@@ -27,6 +27,55 @@ def test_lock_lasts_two_hours_in_the_sao_paulo_timezone(tmp_path, monkeypatch):
 def test_without_a_lock_file_it_is_not_paused(tmp_path, monkeypatch):
     monkeypatch.setattr(pause, "pause_lock_path", lambda: str(tmp_path / "missing"))
     assert pause.is_paused(datetime(2026, 10, 3, 10, 0, tzinfo=ZONE)) is False
+
+
+def test_pause_after_the_first_arena_does_not_start_the_next(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(main, "ARENAS", [ARENA, OUTRA_ARENA])
+    monkeypatch.setattr(main, "DIRETORIO_EXTRACOES", str(tmp_path))
+    monkeypatch.setattr(main, "DIRETORIO_LOGS", str(tmp_path))
+    monkeypatch.setattr(main, "ARENAS_EM_PARALELO", 2)
+    monkeypatch.setattr(main, "wait_between_accesses", lambda: None)
+    checks_left = {"n": 2}
+
+    def is_paused(moment=None):
+        if checks_left["n"]:
+            checks_left["n"] -= 1
+            return False
+        return True
+
+    monkeypatch.setattr(main, "is_paused", is_paused)
+    seen = []
+
+    def extract(self):
+        seen.append(self.arena["nome"])
+        return ["um.csv"], ["Quadra"], "log\n"
+
+    monkeypatch.setattr(arena_extractor.ArenaExtractor, "extract_isolating_failures", extract)
+
+    main.main()
+
+    assert seen == ["SP Sports"]
+    assert "encerrando" in capsys.readouterr().out
+
+
+def test_captcha_mid_round_returns_without_error_exit(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(main, "ARENAS", [ARENA])
+    monkeypatch.setattr(main, "DIRETORIO_EXTRACOES", str(tmp_path))
+    monkeypatch.setattr(main, "DIRETORIO_LOGS", str(tmp_path))
+    monkeypatch.setattr(main, "ARENAS_EM_PARALELO", 1)
+    monkeypatch.setattr(main, "wait_between_accesses", lambda: None)
+    paused = {"on": False}
+    monkeypatch.setattr(main, "is_paused", lambda moment=None: paused["on"])
+
+    def collect(self):
+        paused["on"] = True
+        raise pause.CaptchaPause("captcha detectado")
+
+    monkeypatch.setattr(arena_extractor.ArenaExtractor, "_collect_courts", collect)
+
+    main.main()
+
+    assert "captcha detectado" in capsys.readouterr().out
 
 
 def test_round_stops_while_the_lock_is_still_active(monkeypatch, tmp_path, capsys):

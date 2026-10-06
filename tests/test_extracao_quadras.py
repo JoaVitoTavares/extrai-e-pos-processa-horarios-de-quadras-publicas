@@ -3,6 +3,7 @@
 from datetime import date, timedelta
 
 import pytest
+from playwright.sync_api import TimeoutError as PWTimeout
 
 from extrator import courts_collector
 
@@ -116,3 +117,26 @@ def test_pagina_sem_quadras_devolve_aviso(pagina):
     assert quadras[0]["horarios"] == []
     assert quadras[0]["aviso"]
     assert quadras[0]["data"] == "2026-08-07"
+
+
+def test_dia_so_fixa_quando_a_agenda_aparece(monkeypatch):
+    tentativas = {"n": 0}
+    monkeypatch.setattr(courts_collector, "_try_day", lambda *args, **kwargs: True)
+
+    def horarios(page, timeout_ms=6_000):
+        tentativas["n"] += 1
+        return tentativas["n"] >= 2
+
+    monkeypatch.setattr(courts_collector, "_schedules_on_screen", horarios)
+
+    courts_collector._select_day(object(), date(2026, 8, 7), timeout_ms=10, attempts=3)
+
+    assert tentativas["n"] == 2
+
+
+def test_dia_que_falha_as_tres_tentativas_sobe_timeout(monkeypatch):
+    monkeypatch.setattr(courts_collector, "_try_day", lambda *args, **kwargs: False)
+    monkeypatch.setattr(courts_collector, "_schedules_on_screen", lambda *args, **kwargs: True)
+
+    with pytest.raises(PWTimeout, match="não fixou o dia"):
+        courts_collector._select_day(object(), date(2026, 8, 7), timeout_ms=10, attempts=3)

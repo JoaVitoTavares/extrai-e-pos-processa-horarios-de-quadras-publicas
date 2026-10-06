@@ -1,13 +1,14 @@
 """Testes do aviso por e-mail em captcha e falhas, sem SMTP real."""
 
 import pytest
+import requests
 from playwright.sync_api import TimeoutError as PWTimeout
 
 from extrator import arena_extractor
 from extrator import courts_collector
 from extrator import email_config
 import main
-from test_main import ARENA
+from test_main import ARENA, quadra
 
 
 def test_sends_one_email_with_the_env_settings(monkeypatch):
@@ -115,3 +116,39 @@ def test_arena_exception_triggers_one_email(monkeypatch):
 
     assert len(alerts) == 1
     assert "timeout" in alerts[0][1].lower() or "timeout" in alerts[0][0].lower()
+
+
+def test_sport_timeout_sends_one_email_and_keeps_the_other_sport(monkeypatch):
+    alerts = []
+    monkeypatch.setattr(arena_extractor, "send_alert", lambda *args, **kwargs: alerts.append(args))
+    monkeypatch.setattr(arena_extractor, "list_sports", lambda arena_url: ["Grama 7", "Grama 5"])
+    monkeypatch.setattr(arena_extractor, "filter_target_sports", lambda sports, types: sports)
+    monkeypatch.setattr(arena_extractor, "missing_court_types", lambda targets, types: [])
+
+    def collect(sport, arena_url, period=None, headless=True, types=None, **kwargs):
+        if sport == "Grama 7":
+            raise PWTimeout("tempo esgotado")
+        return [quadra(nome="Grama 5 - Interna")]
+
+    monkeypatch.setattr(arena_extractor, "collect_schedules", collect)
+    results = arena_extractor.ArenaExtractor(main.normalize_arena_info(ARENA))._collect_courts()
+
+    assert [item["quadra"] for item in results] == ["Grama 5 - Interna"]
+    assert len(alerts) == 1
+    assert "Grama 7" in alerts[0][0]
+    assert "tempo esgotado" in alerts[0][1]
+
+
+def test_geocoding_failure_sends_one_email_and_skips_weather(monkeypatch):
+    alerts = []
+    monkeypatch.setattr(arena_extractor, "send_alert", lambda *args, **kwargs: alerts.append(args))
+    monkeypatch.setattr(
+        arena_extractor, "resolver_local",
+        lambda *args, **kwargs: (_ for _ in ()).throw(requests.ConnectionError("sem rede")),
+    )
+    extractor = arena_extractor.ArenaExtractor(main.normalize_arena_info(ARENA))
+
+    assert extractor._record_location([{"endereco": "Rua 1, Canoas"}]) is None
+    assert len(alerts) == 1
+    assert "SP Sports" in alerts[0][0]
+    assert "sem rede" in alerts[0][1]

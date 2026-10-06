@@ -1,5 +1,7 @@
 """Testes da troca de período, que é sincronizada pelo realce do botão."""
 
+from datetime import date
+
 import pytest
 from playwright.sync_api import TimeoutError as PWTimeout
 
@@ -44,3 +46,52 @@ def test_periodo_realcado_e_o_que_o_site_esta_mostrando(carregar_fixture):
     assert courts_collector._period_selected(pagina, "Noite")
     assert not courts_collector._period_selected(pagina, "Manhã")
     assert not courts_collector._period_selected(pagina, "Tarde")
+
+
+class _Pagina:
+    def locator(self, seletor):
+        return self
+
+    def inner_text(self):
+        return "texto"
+
+
+def _coletar_com_manha_travada(monkeypatch, com_preco):
+    precos = []
+    monkeypatch.setattr(courts_collector, "_wait_for_courts", lambda page, **kwargs: None)
+    monkeypatch.setattr(
+        courts_collector, "_collect_prices", lambda root, horarios: precos.append(root)
+    )
+
+    def selecionar(page, period, previous, timeout_ms=6_000):
+        if period == "Manhã":
+            raise PWTimeout("período")
+        return "ok"
+
+    def extrair(page, sport, period, day, types=None):
+        return [{
+            "periodo": period,
+            "quadra": "Areia 1",
+            "horarios": [{"hora": "10:00", "status": "Livre"}],
+            "aviso": None,
+            "raiz": f"raiz-{period}",
+        }]
+
+    monkeypatch.setattr(courts_collector, "_select_period", selecionar)
+    monkeypatch.setattr(courts_collector, "_extract_courts", extrair)
+    coletado = courts_collector._collect_day(
+        _Pagina(), "Vôlei de praia", date(2026, 8, 7),
+        ["Manhã", "Tarde", "Noite"], com_preco, ["Vôlei de praia"],
+    )
+    return coletado, precos
+
+
+def test_periodo_que_nao_responde_deixa_os_outros_e_so_le_preco_quando_pedido(monkeypatch):
+    com_preco, precos = _coletar_com_manha_travada(monkeypatch, True)
+    sem_preco, precos_vazios = _coletar_com_manha_travada(monkeypatch, False)
+
+    assert [item["periodo"] for item in com_preco] == ["Tarde", "Noite"]
+    assert "raiz" not in com_preco[0]
+    assert precos == ["raiz-Tarde", "raiz-Noite"]
+    assert [item["periodo"] for item in sem_preco] == ["Tarde", "Noite"]
+    assert precos_vazios == []
