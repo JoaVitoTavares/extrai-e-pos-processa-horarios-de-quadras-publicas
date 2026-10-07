@@ -1,0 +1,34 @@
+<!-- grade de um mês: o dia seguinte só entra depois do avanço, e o desabilitado não grava -->
+<input class="picker__input" type="text" readonly value="" style="height: 40px; width: 200px;">
+<div class="picker picker--opened" style="display: block;">
+  <div class="picker__nav--next" id="proximo-mes" style="height: 24px; width: 24px;">›</div>
+  <div id="grade">
+    <div class="picker__day" aria-label="07/10/26" style="height: 24px; width: 24px;">7</div>
+    <div class="picker__day picker__day--disabled" aria-label="08/10/26" style="height: 24px; width: 24px;">8</div>
+    <div class="picker__day" aria-label="09/10/26" data-nao-grava="1" style="height: 24px; width: 24px;">9</div>
+  </div>
+</div>
+<div id="cliques-no-proximo">0</div>
+<script>
+  const campo = document.querySelector(".picker__input");
+  function gravar(dia) {
+    if (dia.getAttribute("data-nao-grava") === "1") return;
+    campo.value = dia.getAttribute("aria-label");
+  }
+  document.querySelectorAll(".picker__day").forEach((dia) => {
+    dia.addEventListener("click", () => gravar(dia));
+  });
+  document.getElementById("proximo-mes").addEventListener("click", () => {
+    const contador = document.getElementById("cliques-no-proximo");
+    contador.textContent = String(Number(contador.textContent) + 1);
+    if (document.querySelector("[aria-label='01/11/26']")) return;
+    const dia = document.createElement("div");
+    dia.className = "picker__day";
+    dia.setAttribute("aria-label", "01/11/26");
+    dia.style.height = "24px";
+    dia.style.width = "24px";
+    dia.textContent = "1";
+    dia.addEventListener("click", () => gravar(dia));
+    document.getElementById("grade").appendChild(dia);
+  });
+</script>
