@@ -197,6 +197,28 @@ def test_upsert_atualiza_slot_futuro(tmp_path):
     assert df.loc[0, "valor_horario"] == "100.0"
 
 
+def test_reclassificacao_posterior_nao_troca_tipo_nem_cobertura(tmp_path):
+    primeira = [quadra(
+        "Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}],
+        coberta="false", tipo="Vôlei de praia", periodo="Noite",
+    )]
+    segunda = [quadra(
+        "Areia 1 - Interna", [{"hora": "20:00", "status": "Livre", "valor": 80.0}],
+        coberta="true", tipo="Futebol de salão", periodo="Tarde",
+    )]
+    persistencia.salvar_extracao(primeira, str(tmp_path), AGORA)
+    caminho = persistencia.salvar_extracao(
+        segunda, str(tmp_path), datetime(2026, 8, 7, 12, 0)
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "tipo_quadra"] == "Vôlei de praia"
+    assert df.loc[0, "quadra_coberta"] == "false"
+    assert df.loc[0, "periodo"] == "Tarde"
+    assert df.loc[0, "valor_horario"] == "80.0"
+    assert df.loc[0, "status"] == "Livre"
+
+
 def test_upsert_congela_slot_que_ja_passou(tmp_path):
     antes = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre", "valor": 100.0}])]
     depois = [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Indisponível"}])]
@@ -207,6 +229,23 @@ def test_upsert_congela_slot_que_ja_passou(tmp_path):
 
     assert len(df) == 1
     assert df.loc[0, "status"] == "Livre"
+
+
+def test_no_instante_do_horario_o_slot_fica_congelado(tmp_path):
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre", "valor": 100.0}])],
+        str(tmp_path), AGORA,
+    )
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Indisponível"}])],
+        str(tmp_path), datetime(2026, 8, 7, 17, 0, 0),
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "status"] == "Livre"
+    assert df.loc[0, "valor_horario"] == "100.0"
+    assert df.loc[0, "reservado_em"] == ""
+    assert df.loc[0, "ultima_atualizacao"] == "2026-08-07T08:00:00"
 
 
 @pytest.mark.parametrize(
@@ -241,6 +280,31 @@ def test_reserva_detectada_quando_o_horario_livre_vira_indisponivel(tmp_path):
     assert df.loc[0, "reservado_em"] == "2026-08-07T17:00:00"
     assert df.loc[0, "periodo_da_reserva"] == "Tarde"
     assert df.loc[0, "antecedencia_horas"] == "3.00"
+
+
+def test_reserva_de_um_horario_nao_altera_o_vizinho(tmp_path):
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [
+            {"hora": "20:00", "status": "Livre"},
+            {"hora": "21:00", "status": "Livre"},
+        ])],
+        str(tmp_path), AGORA,
+    )
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [
+            {"hora": "20:00", "status": "Indisponível"},
+            {"hora": "21:00", "status": "Livre"},
+        ])],
+        str(tmp_path), datetime(2026, 8, 7, 17, 0),
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False).set_index("horario_inicio")
+
+    assert df.loc["20:00", "status"] == "Indisponível"
+    assert df.loc["20:00", "reservado_em"] == "2026-08-07T17:00:00"
+    assert df.loc["21:00", "status"] == "Livre"
+    assert df.loc["21:00", "reservado_em"] == ""
+    assert df.loc["21:00", "antecedencia_horas"] == ""
+    assert df.loc["21:00", "ultima_atualizacao"] == "2026-08-07T17:00:00"
 
 
 def test_reserva_de_dias_antes_mantem_a_antecedencia_grande(tmp_path):

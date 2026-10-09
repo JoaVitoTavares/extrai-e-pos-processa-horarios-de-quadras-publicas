@@ -90,6 +90,25 @@ def test_desce_para_a_consulta_seguinte_quando_nao_ha_resultado(monkeypatch):
     assert local["origem"] == "Parobé"
 
 
+def test_consulta_seguinte_espera_o_intervalo_do_nominatim(monkeypatch):
+    pausas = []
+    consultas = []
+
+    def get_falso(url, **kwargs):
+        consultas.append(kwargs["params"]["q"])
+        return RespostaFalsa([] if len(consultas) == 1 else [ACHADO])
+
+    monkeypatch.setattr(requests, "get", get_falso)
+    monkeypatch.setattr(localizacao.time, "sleep", pausas.append)
+
+    local = localizacao.geocodificar(ENDERECO)
+
+    assert consultas == ["20 de Junho 54, Parobé", "20 de Junho, Parobé"]
+    assert localizacao.ESPERA_ENTRE_CONSULTAS_S >= 1
+    assert pausas == [localizacao.ESPERA_ENTRE_CONSULTAS_S]
+    assert local["origem"] == "20 de Junho, Parobé"
+
+
 def test_endereco_que_nenhuma_consulta_resolve_devolve_none(respostas):
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([])
