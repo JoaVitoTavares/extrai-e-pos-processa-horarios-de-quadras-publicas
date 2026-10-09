@@ -10,7 +10,7 @@ from extrator import arena_extractor
 from extrator import config
 from extrator import weather_collector
 import main
-from test_main import ARENA, LOCAL, quadra
+from test_main import ARENA, LOCAL, OUTRA_ARENA, quadra
 
 ZONE = ZoneInfo("America/Sao_Paulo")
 DAY = date(2026, 10, 3)
@@ -136,3 +136,42 @@ def test_next_day_waits_until_the_arenas_broken_time(monkeypatch, tmp_path):
     main.main()
 
     assert sleeps == [18 * 60]
+
+
+def test_next_day_submits_an_earlier_peak_before_a_later_one_listed_first(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "ARENAS", [ARENA, OUTRA_ARENA])
+    monkeypatch.setattr(main, "DIRETORIO_EXTRACOES", str(tmp_path))
+    monkeypatch.setattr(main, "DIRETORIO_LOGS", str(tmp_path))
+    monkeypatch.setattr(main, "ARENAS_EM_PARALELO", 1)
+    monkeypatch.setattr("sys.argv", ["main.py", "--de", "1", "--ate", "5"])
+    now = _moment(17, 0)
+    monkeypatch.setattr(main, "current_peak_window", lambda moment=None: "evening")
+    monkeypatch.setattr(main, "local_now", lambda moment=None: now)
+
+    def peaks(arena_key, day, rand_num_gen=None):
+        if arena_key == "sp-sports":
+            return (time(7, 10), time(19, 40))
+        return (time(7, 12), time(17, 20))
+
+    monkeypatch.setattr(main, "peak_times_for_arena", peaks)
+    sleeps = []
+    monkeypatch.setattr(main, "sleep_seconds", sleeps.append)
+    started = []
+    monkeypatch.setattr(arena_extractor, "resolver_local", lambda *a, **k: LOCAL)
+    monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda *a, **k: ["um.csv"])
+    monkeypatch.setattr(weather_collector, "collect_weather", lambda *a, **k: "clima.csv")
+    monkeypatch.setattr(weather_collector, "collect_forecast", lambda *a, **k: "previsao.csv")
+    monkeypatch.setattr(
+        arena_extractor, "TratamentoDeDados",
+        type("T", (), {"__init__": lambda self, *a, **k: None, "aplicar": lambda self, now=None: ["um.csv"]}),
+    )
+    monkeypatch.setattr(main, "wait_between_accesses", lambda: None)
+    monkeypatch.setattr(
+        arena_extractor.ArenaExtractor, "_collect_courts",
+        lambda self: started.append(self.arena["nome"]) or [quadra()],
+    )
+
+    main.main()
+
+    assert started == ["Arena Parobé", "SP Sports"]
+    assert sleeps == [20 * 60, (2 * 60 + 40) * 60]
