@@ -84,6 +84,18 @@ def arena_schedule_key(arena: dict) -> str:
     return os.path.basename(arena["diretorio"])
 
 
+def peak_instant_for_arena(arena: dict, moment):
+    """Devolve o horário de pico da arena na janela atual. Se esse horário já passou,
+    devolve o próprio instante para a arena entrar na fila sem espera."""
+    window = current_peak_window(moment)
+    morning, evening = peak_times_for_arena(arena_schedule_key(arena), moment.date())
+    chosen = morning if window == "morning" else evening
+    target = moment.replace(
+        hour=chosen.hour, minute=chosen.minute, second=0, microsecond=0
+    )
+    return target if target > moment else moment
+
+
 def main() -> None:
     load_dotenv()
     arguments = parse_arguments()
@@ -102,6 +114,9 @@ def main() -> None:
         print(f"[AVISO] a previsão do tempo é buscada só até D+{DAYS_AHEAD}; as colunas "
               f"de previsão ficarão vazias de D+{DAYS_AHEAD + 1} em diante.", file=sys.stderr)
     arenas = [normalize_arena_info(configured_arena) for configured_arena in ARENAS]
+    start = local_now()
+    if days_from >= 1:
+        arenas = sorted(arenas, key=lambda arena: peak_instant_for_arena(arena, start))
     wait_between_accesses()
 
     saved_paths = []
@@ -117,16 +132,8 @@ def main() -> None:
                 print("pausado por captcha: encerrando as verificações em andamento.")
                 break
             if days_from >= 1:
-                moment = local_now()
-                window = current_peak_window(moment)
-                morning, evening = peak_times_for_arena(
-                    arena_schedule_key(arena), moment.date()
-                )
-                chosen = morning if window == "morning" else evening
-                target = moment.replace(
-                    hour=chosen.hour, minute=chosen.minute, second=0, microsecond=0
-                )
-                sleep_seconds(max(0.0, (target - moment).total_seconds()))
+                target = peak_instant_for_arena(arena, start)
+                sleep_seconds(max(0.0, (target - local_now()).total_seconds()))
             extractor = ArenaExtractor(
                 arena, visible_browser, days_from, days_ahead, arguments.proxy
             )
