@@ -44,6 +44,13 @@ def test_same_arena_on_the_same_day_repeats_the_time():
     )
 
 
+def test_same_arena_on_the_next_day_draws_another_time():
+    today = access_windows.peak_times_for_arena("sp-sports", DAY)
+    tomorrow = access_windows.peak_times_for_arena("sp-sports", date(2026, 10, 4))
+
+    assert today != tomorrow
+
+
 def test_peak_window_is_morning_and_evening():
     assert access_windows.current_peak_window(_moment(7, 0)) == "morning"
     assert access_windows.current_peak_window(_moment(8, 59)) == "morning"
@@ -136,3 +143,39 @@ def test_next_day_waits_until_the_arenas_broken_time(monkeypatch, tmp_path):
     main.main()
 
     assert sleeps == [18 * 60]
+
+
+def test_next_day_in_the_evening_waits_for_the_evening_time(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "ARENAS", [ARENA])
+    monkeypatch.setattr(main, "DIRETORIO_EXTRACOES", str(tmp_path))
+    monkeypatch.setattr(main, "DIRETORIO_LOGS", str(tmp_path))
+    monkeypatch.setattr(main, "ARENAS_EM_PARALELO", 1)
+    monkeypatch.setattr("sys.argv", ["main.py", "--de", "1", "--ate", "5"])
+    now = _moment(17, 0)
+    morning = time(7, 18)
+    evening = time(17, 41)
+    monkeypatch.setattr(main, "current_peak_window", lambda moment=None: "evening")
+    monkeypatch.setattr(
+        main, "peak_times_for_arena",
+        lambda arena_key, day, rand_num_gen=None: (morning, evening),
+    )
+    monkeypatch.setattr(main, "local_now", lambda moment=None: now)
+    sleeps = []
+    monkeypatch.setattr(main, "sleep_seconds", sleeps.append)
+    monkeypatch.setattr(arena_extractor, "resolver_local", lambda *a, **k: LOCAL)
+    monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda *a, **k: ["um.csv"])
+    monkeypatch.setattr(weather_collector, "collect_weather", lambda *a, **k: "clima.csv")
+    monkeypatch.setattr(weather_collector, "collect_forecast", lambda *a, **k: "previsao.csv")
+    monkeypatch.setattr(
+        arena_extractor, "TratamentoDeDados",
+        type("T", (), {"__init__": lambda self, *a, **k: None, "aplicar": lambda self, now=None: ["um.csv"]}),
+    )
+    monkeypatch.setattr(main, "wait_between_accesses", lambda: None)
+    monkeypatch.setattr(
+        arena_extractor.ArenaExtractor, "_collect_courts",
+        lambda self: [quadra()],
+    )
+
+    main.main()
+
+    assert sleeps == [41 * 60]
