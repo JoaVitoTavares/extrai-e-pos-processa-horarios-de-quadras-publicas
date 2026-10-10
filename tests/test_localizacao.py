@@ -40,6 +40,17 @@ def test_endereco_observado_sem_nenhuma_leitura():
     assert localizacao.endereco_observado([quadra(""), {"quadra": "Areia 2"}]) == ""
 
 
+def test_endereco_em_branco_nao_entra_na_contagem():
+    assert localizacao.endereco_observado([quadra("   "), quadra(ENDERECO)]) == ENDERECO
+
+
+def test_endereco_empatado_fica_com_o_primeiro_visto():
+    outro = "Boqueirão 2710, Canoas"
+    resultados = [quadra(outro), quadra(ENDERECO), quadra(outro), quadra(ENDERECO)]
+
+    assert localizacao.endereco_observado(resultados) == outro
+
+
 @pytest.mark.parametrize(
     "endereco, esperado",
     [
@@ -103,6 +114,30 @@ def test_resposta_sem_coordenada_falha_alto(respostas):
 
     with pytest.raises(ValueError, match="formato inesperado"):
         localizacao.geocodificar(ENDERECO)
+
+
+def test_json_que_nao_e_lista_nao_e_um_achado(respostas):
+    chamadas, get_falso = respostas
+    get_falso.resposta = RespostaFalsa({"error": "Unable to geocode"})
+
+    assert localizacao.consultar_geocodificacao(ENDERECO) is None
+
+
+def test_erro_na_primeira_consulta_tenta_a_seguinte(monkeypatch):
+    consultas = []
+
+    def get_falso(url, **kwargs):
+        consultas.append(kwargs["params"]["q"])
+        if len(consultas) == 1:
+            return RespostaFalsa({"error": "Unable to geocode"})
+        return RespostaFalsa([ACHADO])
+
+    monkeypatch.setattr(requests, "get", get_falso)
+    local = localizacao.geocodificar(ENDERECO)
+
+    assert consultas[0] == ENDERECO
+    assert local["origem"] == "20 de Junho, Parobé"
+    assert local["cidade"] == "Parobé"
 
 
 def test_erro_http_sobe(respostas):
