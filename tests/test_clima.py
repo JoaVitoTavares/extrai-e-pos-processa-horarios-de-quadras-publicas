@@ -229,6 +229,17 @@ def test_previsao_vira_uma_linha_por_hora(tmp_path):
     assert df.loc[1, "clima"] == "Céu limpo"
 
 
+def test_lista_horaria_mais_curta_que_o_tempo_fica_vazia_no_resto(tmp_path):
+    curta = dict(HORARIA, precipitation=[2.4])
+    caminho = weather_collector.save_forecast(curta, LATITUDE, LONGITUDE, str(tmp_path), AGORA)
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert list(df["data_hora"]) == ["2026-08-16T20:00", "2026-08-16T21:00"]
+    assert list(df["precipitacao"]) == ["2.4", ""]
+    assert df.loc[1, "temperatura"] == "17.5"
+    assert df.loc[1, "clima"] == "Céu limpo"
+
+
 def test_campo_que_a_api_deixar_de_mandar_vira_coluna_vazia(tmp_path):
     sem_vento = {chave: valor for chave, valor in HORARIA.items() if chave != "wind_speed_10m"}
     caminho = weather_collector.save_forecast(sem_vento, LATITUDE, LONGITUDE, str(tmp_path), AGORA)

@@ -103,6 +103,53 @@ def test_today_extraction_does_not_wait_for_peak_window(monkeypatch, tmp_path):
     assert called == ["courts"]
 
 
+def test_peak_window_uses_sao_paulo_timezone_not_utc():
+    utc_evening = datetime(2026, 10, 3, 20, 30, tzinfo=ZoneInfo("UTC"))
+    utc_afternoon = datetime(2026, 10, 3, 17, 0, tzinfo=ZoneInfo("UTC"))
+
+    assert utc_evening.astimezone(ZONE).hour == 17
+    assert access_windows.current_peak_window(utc_evening) == "evening"
+    assert utc_afternoon.astimezone(ZONE).hour == 14
+    assert access_windows.current_peak_window(utc_afternoon) is None
+
+
+def test_next_day_already_past_broken_time_collects_immediately(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "ARENAS", [ARENA])
+    monkeypatch.setattr(main, "DIRETORIO_EXTRACOES", str(tmp_path))
+    monkeypatch.setattr(main, "DIRETORIO_LOGS", str(tmp_path))
+    monkeypatch.setattr(main, "ARENAS_EM_PARALELO", 1)
+    monkeypatch.setattr("sys.argv", ["main.py", "--de", "1", "--ate", "5"])
+    now = _moment(7, 40)
+    target = time(7, 18)
+    monkeypatch.setattr(main, "current_peak_window", lambda moment=None: "morning")
+    monkeypatch.setattr(
+        main, "peak_times_for_arena",
+        lambda arena_key, day, rand_num_gen=None: (target, time(17, 22)),
+    )
+    monkeypatch.setattr(main, "local_now", lambda moment=None: now)
+    sleeps = []
+    monkeypatch.setattr(main, "sleep_seconds", sleeps.append)
+    monkeypatch.setattr(arena_extractor, "resolver_local", lambda *a, **k: LOCAL)
+    monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda *a, **k: ["um.csv"])
+    monkeypatch.setattr(weather_collector, "collect_weather", lambda *a, **k: "clima.csv")
+    monkeypatch.setattr(weather_collector, "collect_forecast", lambda *a, **k: "previsao.csv")
+    monkeypatch.setattr(
+        arena_extractor, "TratamentoDeDados",
+        type("T", (), {"__init__": lambda self, *a, **k: None, "aplicar": lambda self, now=None: ["um.csv"]}),
+    )
+    monkeypatch.setattr(main, "wait_between_accesses", lambda: None)
+    called = []
+    monkeypatch.setattr(
+        arena_extractor.ArenaExtractor, "_collect_courts",
+        lambda self: called.append("courts") or [quadra()],
+    )
+
+    main.main()
+
+    assert sleeps == [0.0]
+    assert called == ["courts"]
+
+
 def test_next_day_waits_until_the_arenas_broken_time(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "ARENAS", [ARENA])
     monkeypatch.setattr(main, "DIRETORIO_EXTRACOES", str(tmp_path))

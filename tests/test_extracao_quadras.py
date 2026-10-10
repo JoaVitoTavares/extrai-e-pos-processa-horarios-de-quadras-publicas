@@ -116,3 +116,79 @@ def test_pagina_sem_quadras_devolve_aviso(pagina):
     assert quadras[0]["horarios"] == []
     assert quadras[0]["aviso"]
     assert quadras[0]["data"] == "2026-08-07"
+
+
+def test_status_em_outra_caixa_e_hora_de_um_digito_saem_normalizados(pagina):
+    pagina.set_content(
+        '<div class="bubble-rg-flex-row">'
+        '<div class="group-item">Quadra 1\n9:00 - livre\n10:00 - INDISPONÍVEL</div>'
+        "</div>"
+    )
+    quadras = courts_collector._extract_courts(pagina, "Grama 5", "Manhã", DIA)
+
+    assert [(h["hora"], h["status"]) for h in quadras[0]["horarios"]] == [
+        ("9:00", "Livre"),
+        ("10:00", "Indisponível"),
+    ]
+
+
+class _Bloco:
+    def __init__(self, texto):
+        self.texto = texto
+
+    def inner_text(self):
+        return self.texto
+
+
+class _PaginaComBlocos:
+    def __init__(self, textos):
+        self.textos = textos
+        self.esperas = []
+
+    def locator(self, selector):
+        return self
+
+    def all(self):
+        return [_Bloco(texto) for texto in self.textos]
+
+    def wait_for_timeout(self, ms):
+        self.esperas.append(ms)
+
+
+def _avanca_relogio(monkeypatch, pagina, clock):
+    def esperar(ms):
+        pagina.esperas.append(ms)
+        clock["now"] += ms / 1000
+
+    monkeypatch.setattr(courts_collector.time, "monotonic", lambda: clock["now"])
+    pagina.wait_for_timeout = esperar
+
+
+def test_espera_enquanto_alguma_quadra_ainda_nao_tem_horario(monkeypatch):
+    clock = {"now": 0.0}
+    pagina = _PaginaComBlocos(["Areia 1\n18:00 - Livre", "Areia 2\ncarregando"])
+    _avanca_relogio(monkeypatch, pagina, clock)
+
+    courts_collector._wait_for_courts(pagina, timeout_ms=500, interval_ms=250)
+
+    assert pagina.esperas == [250, 250]
+
+
+def test_segue_quando_todas_as_quadras_ja_tem_horario(monkeypatch):
+    clock = {"now": 0.0}
+    pagina = _PaginaComBlocos(["18:00 - Livre", "19:00 - Indisponível"])
+    _avanca_relogio(monkeypatch, pagina, clock)
+
+    courts_collector._wait_for_courts(pagina, timeout_ms=5_000, interval_ms=250)
+
+    assert pagina.esperas == []
+
+
+def test_pagina_sem_bloco_de_quadra_nao_conta_como_pronta(monkeypatch):
+    clock = {"now": 0.0}
+    pagina = _PaginaComBlocos([])
+    _avanca_relogio(monkeypatch, pagina, clock)
+
+    courts_collector._wait_for_courts(pagina, timeout_ms=250, interval_ms=250)
+
+    assert pagina.esperas == [250]
