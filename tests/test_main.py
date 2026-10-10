@@ -10,6 +10,7 @@ from playwright.sync_api import TimeoutError as PWTimeout
 
 import main
 from extrator import arena_extractor, weather_collector
+from extrator.pause import CaptchaPause
 ARENA = {"nome": "SP Sports", "url": "https://webarena.app/arena/sp-sports"}
 OUTRA_ARENA = {"nome": "Arena Parobé", "url": "https://webarena.app/arena/parobe"}
 LOCAL = {
@@ -336,6 +337,28 @@ def test_sai_com_erro_quando_nao_grava_nada(monkeypatch):
         main.main()
 
     assert saida.value.code == 1
+
+
+def test_captcha_no_esporte_seguinte_grava_o_que_ja_foi_coletado(monkeypatch):
+    monkeypatch.setattr(arena_extractor, "list_sports", lambda arena_url: ["Grama 7", "Grama 5"])
+
+    def coletar(sport, arena_url, period=None, headless=True, types=None, **kwargs):
+        if sport == "Grama 5":
+            raise CaptchaPause("captcha detectado")
+        return [quadra(
+            nome="Grama 7 - Externa",
+            horarios=[{"hora": "20:00", "status": "Livre"}],
+        )]
+
+    monkeypatch.setattr(arena_extractor, "collect_schedules", coletar)
+    paths, names, _log = arena_extractor.ArenaExtractor(
+        main.normalize_arena_info(ARENA)
+    ).extract_isolating_failures()
+    df = pd.read_csv(paths[0], dtype=str, keep_default_na=False)
+
+    assert names == ["Grama 7 - Externa"]
+    assert df.loc[0, "horario_inicio"] == "20:00"
+    assert df.loc[0, "status"] == "Livre"
 
 
 def test_esporte_que_estoura_o_tempo_nao_derruba_os_outros(monkeypatch, capsys):

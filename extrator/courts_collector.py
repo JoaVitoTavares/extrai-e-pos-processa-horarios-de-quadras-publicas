@@ -515,7 +515,8 @@ def collect_schedules(
 
             for index, day in enumerate(days):
                 if is_paused():
-                    raise CaptchaPause("coleta pausada por captcha")
+                    debug(f"'{sport}': pausa de captcha com {len(results)} registro(s)")
+                    break
                 debug(f"'{sport}': dia {index + 1}/{len(days)} ({day.isoformat()})")
                 try:
                     _select_day(page, day)
@@ -526,6 +527,8 @@ def collect_schedules(
                     _collect_day(page, sport, day, periods, day == today, types)
                 )
 
+            if is_paused() and not results:
+                raise CaptchaPause("coleta pausada por captcha")
             debug(f"'{sport}': fechando navegador com {len(results)} registro(s)")
             return [dict(court, endereco=address) for court in results]
 

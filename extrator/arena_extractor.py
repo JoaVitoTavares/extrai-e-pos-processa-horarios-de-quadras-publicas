@@ -11,6 +11,7 @@ from extrator.courts_collector import (
     collect_schedules, filter_target_sports, list_sports, missing_court_types
 )
 from extrator.localizacao import endereco_observado, resolver_local
+from extrator.pause import CaptchaPause
 from extrator.persistencia import salvar_extracao
 from extrator.profiles import draw_access_profile
 from extrator.email_config import send_alert
@@ -123,6 +124,10 @@ class ArenaExtractor:
                     f"Falha em {self.arena['nome']} ({sport})",
                     str(error),
                 )
+            except CaptchaPause as error:
+                print(f"[AVISO] {self.arena['nome']}: coleta interrompida por captcha: {error}",
+                      file=sys.stderr)
+                break
         return results
 
     def _record_location(self, results: list[dict]) -> dict | None:
