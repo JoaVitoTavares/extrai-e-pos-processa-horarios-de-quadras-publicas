@@ -92,6 +92,20 @@ def test_hesitates_on_the_target_without_clicking(monkeypatch):
     assert "click:right" not in page.log
 
 
+def test_wrong_click_without_a_distractor_only_goes_back(monkeypatch):
+    monkeypatch.setattr(human, "wait_between_clicks", lambda: None)
+    page = FakePage()
+
+    kind = human.simulate_human_failure(
+        page,
+        intended=Target("right", page.log),
+        rand_num_gen=_fixed_rand_num_gen("wrong_click"),
+    )
+
+    assert kind == "wrong_click"
+    assert page.log == ["back"]
+
+
 def test_scrolls_past_and_returns(monkeypatch):
     monkeypatch.setattr(human, "wait_between_clicks", lambda: None)
     page = FakePage()

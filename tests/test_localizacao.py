@@ -177,5 +177,37 @@ def test_local_corrompido_conta_como_cache_vazio(respostas, tmp_path):
     assert local["cidade"] == "Parobé"
 
 
+def test_latitude_zero_continua_no_cache(respostas, tmp_path):
+    chamadas, get_falso = respostas
+    get_falso.resposta = RespostaFalsa([ACHADO])
+    localizacao.salvar_local(
+        {
+            "endereco": ENDERECO,
+            "latitude": 0.0,
+            "longitude": 0.0,
+            "cidade": "Null Island",
+            "origem": "config",
+        },
+        str(tmp_path),
+    )
+
+    local = localizacao.resolver_local(ENDERECO, str(tmp_path))
+
+    assert chamadas == []
+    assert (local["latitude"], local["longitude"]) == (0.0, 0.0)
+    assert local["cidade"] == "Null Island"
+
+
+def test_coordenadas_zero_do_config_sao_gravadas(respostas, tmp_path):
+    chamadas, get_falso = respostas
+    get_falso.resposta = RespostaFalsa([ACHADO])
+
+    local = localizacao.resolver_local(ENDERECO, str(tmp_path), coordenadas=(0.0, 0.0))
+
+    assert chamadas == []
+    assert (local["latitude"], local["longitude"]) == (0.0, 0.0)
+    assert local["origem"] == "config"
+
+
 def test_arquivo_do_local_nao_casa_com_o_glob_das_quadras():
     assert not fnmatch.fnmatch(localizacao.ARQUIVO_LOCAL, "*" + persistencia.SUFIXO_CSV)

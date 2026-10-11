@@ -433,6 +433,27 @@ def test_cada_arena_tem_a_sua_linha_no_log(tmp_path):
     assert list(df["quadras"]) == ["Areia 1", "Grama 5"]
 
 
+def test_preco_zero_permanece_e_mudanca_de_preco_nao_marca_reserva(tmp_path):
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre", "valor": 0.0}])],
+        str(tmp_path), AGORA,
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "valor_horario"] == "0.0"
+    assert df.loc[0, "reservado_em"] == ""
+
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre", "valor": 80.0}])],
+        str(tmp_path), datetime(2026, 8, 7, 9, 0),
+    )
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "valor_horario"] == "80.0"
+    assert df.loc[0, "reservado_em"] == ""
+    assert df.loc[0, "primeira_coleta"] == "2026-08-07T08:00:00"
+
+
 def test_log_cria_o_diretorio_se_nao_existir(tmp_path):
     destino = tmp_path / "ainda-nao-existe"
     caminho = persistencia.registrar_verificacao("SP Sports", ["Areia 1"], str(destino), AGORA)
