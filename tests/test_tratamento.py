@@ -329,6 +329,34 @@ def test_sem_previsao_o_clima_observado_continua_sendo_aplicado(extracoes):
     assert linha["previsao_para_o_jogo_no_momento_da_reserva_clima"] == ""
 
 
+def test_carimbo_de_reserva_ilegivel_nao_impede_a_outra_linha(extracoes):
+    gravar_leitura(
+        dict(ATUAL, time="2026-08-07T10:00", weather_code=61, temperature_2m=19.8),
+        str(extracoes), datetime(2026, 8, 7, 10, 0),
+    )
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "21:00", "status": "Livre"}])],
+        str(extracoes), datetime(2026, 8, 7, 9, 0),
+    )
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [
+            {"hora": "20:00", "status": "Indisponível"},
+            {"hora": "21:00", "status": "Indisponível"},
+        ])],
+        str(extracoes), datetime(2026, 8, 7, 10, 0),
+    )
+    caminho = extracoes / "areia-1-interna-extracoes.csv"
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+    df.loc[df["horario_inicio"] == "20:00", "reservado_em"] = "nao-e-data"
+    df.to_csv(caminho, index=False)
+
+    TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 10, 30))
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False).set_index("horario_inicio")
+
+    assert df.loc["20:00", "na_hora_da_reserva_clima"] == ""
+    assert df.loc["21:00", "na_hora_da_reserva_clima"] == "Chuva fraca"
+
+
 def test_devolve_so_os_arquivos_alterados(extracoes):
     persistencia.salvar_extracao(
         [quadra("Areia 3 - Interna", [{"hora": "23:00", "status": "Livre"}])],
