@@ -63,6 +63,19 @@ def test_user_agent_only_matches_a_viewport_of_the_same_system():
             assert "Linux" in profile["user_agent"]
 
 
+def test_drawn_viewport_does_not_mutate_the_catalog():
+    class First:
+        def choice(self, options):
+            return options[0]
+
+    original = profiles.ACCESS_PROFILES[0]["viewports"][0]["width"]
+    drawn = profiles.draw_access_profile(First())
+    drawn["viewport"]["width"] = original + 1
+
+    assert profiles.ACCESS_PROFILES[0]["viewports"][0]["width"] == original
+    assert drawn["viewport"]["width"] == original + 1
+
+
 def test_arena_check_forwards_the_drawn_viewport(monkeypatch):
     received = {}
     profile = {

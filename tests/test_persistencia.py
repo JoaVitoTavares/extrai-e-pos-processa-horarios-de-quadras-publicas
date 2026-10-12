@@ -243,6 +243,21 @@ def test_reserva_detectada_quando_o_horario_livre_vira_indisponivel(tmp_path):
     assert df.loc[0, "antecedencia_horas"] == "3.00"
 
 
+def test_antecedencia_guarda_a_fracao_da_hora(tmp_path):
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])],
+        str(tmp_path), AGORA,
+    )
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}])],
+        str(tmp_path), datetime(2026, 8, 7, 17, 30),
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "antecedencia_horas"] == "2.50"
+    assert df.loc[0, "periodo_da_reserva"] == "Tarde"
+
+
 def test_reserva_de_dias_antes_mantem_a_antecedencia_grande(tmp_path):
     sabado = "2026-08-09"
     persistencia.salvar_extracao(

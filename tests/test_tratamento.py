@@ -329,6 +329,29 @@ def test_sem_previsao_o_clima_observado_continua_sendo_aplicado(extracoes):
     assert linha["previsao_para_o_jogo_no_momento_da_reserva_clima"] == ""
 
 
+def test_horario_ilegivel_nao_impede_o_clima_da_linha_vizinha(extracoes):
+    gravar_leitura(
+        dict(ATUAL, time="2026-08-07T17:00"),
+        str(extracoes), datetime(2026, 8, 7, 17, 0),
+    )
+    gravar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
+    caminho = extracoes / "areia-1-interna-extracoes.csv"
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+    ruim = df.iloc[0].copy()
+    ruim["horario_inicio"] = "99:99"
+    df.loc[0, "reservado_em"] = "2026-08-07T10:00:00"
+    ruim["reservado_em"] = "2026-08-07T10:00:00"
+    pd.concat([df, pd.DataFrame([ruim])], ignore_index=True).to_csv(caminho, index=False)
+
+    TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 17, 0))
+    linhas = reservas(extracoes).set_index("horario_inicio")
+
+    assert linhas.loc["20:00", "antes_do_jogo_clima"] == "Encoberto"
+    assert linhas.loc["20:00", "previsao_para_o_jogo_no_momento_da_reserva_clima"] == "Chuva moderada"
+    assert linhas.loc["99:99", "antes_do_jogo_clima"] == ""
+    assert linhas.loc["99:99", "previsao_para_o_jogo_no_momento_da_reserva_clima"] == ""
+
+
 def test_devolve_so_os_arquivos_alterados(extracoes):
     persistencia.salvar_extracao(
         [quadra("Areia 3 - Interna", [{"hora": "23:00", "status": "Livre"}])],

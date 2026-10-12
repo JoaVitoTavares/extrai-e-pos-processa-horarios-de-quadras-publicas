@@ -242,6 +242,76 @@ def test_arena_que_falha_nao_derruba_as_outras(monkeypatch, capsys):
     assert "SP Sports" in capsys.readouterr().err
 
 
+def test_duas_arenas_nao_geocodificam_ao_mesmo_tempo(monkeypatch):
+    class Trava:
+        def __init__(self):
+            self._lock = threading.Lock()
+            self.guard = threading.Lock()
+            self.waiting = 0
+            self.holding = 0
+            self.changed = threading.Condition(self.guard)
+
+        def __enter__(self):
+            with self.guard:
+                self.waiting += 1
+                self.changed.notify_all()
+            self._lock.acquire()
+            with self.guard:
+                self.waiting -= 1
+                self.holding += 1
+                self.changed.notify_all()
+            return self
+
+        def __exit__(self, *args):
+            with self.guard:
+                self.holding -= 1
+                self.changed.notify_all()
+            self._lock.release()
+            return False
+
+    trava = Trava()
+    monkeypatch.setattr(arena_extractor, "GEOCODING_LOCK", trava)
+    release = threading.Event()
+    inside = threading.Event()
+    entered = []
+    state = threading.Lock()
+
+    def resolver(endereco, diretorio, coordenadas):
+        with state:
+            entered.append(threading.get_ident())
+            primeiro = len(entered) == 1
+            if primeiro:
+                inside.set()
+        if primeiro:
+            release.wait(5)
+        return LOCAL
+
+    monkeypatch.setattr(arena_extractor, "resolver_local", resolver)
+    threads = []
+    for arena in (ARENA, OUTRA_ARENA):
+        thread = threading.Thread(
+            target=lambda arena=arena: arena_extractor.ArenaExtractor(
+                main.normalize_arena_info(arena)
+            )._record_location([quadra()]),
+        )
+        threads.append(thread)
+        thread.start()
+
+    try:
+        assert inside.wait(5)
+        with trava.guard:
+            assert trava.changed.wait_for(lambda: trava.waiting >= 1, timeout=5)
+            assert trava.holding == 1
+            assert len(entered) == 1
+    finally:
+        release.set()
+
+    for thread in threads:
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+    assert len(entered) == 2
+
+
 def test_arenas_rodam_ao_mesmo_tempo(monkeypatch):
     monkeypatch.setattr(main, "ARENAS", [ARENA, OUTRA_ARENA])
     monkeypatch.setattr(main, "ARENAS_EM_PARALELO", 2)
