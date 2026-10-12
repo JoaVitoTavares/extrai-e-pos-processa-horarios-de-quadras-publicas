@@ -142,7 +142,12 @@ def _gravar_csv(caminho_csv: str, linhas: list[dict], agora: datetime) -> None:
             reserva = _marcar_reserva(
                 df.loc[existente, "status"].iloc[0], linha["status"], slot_dt, agora
             )
-            df.loc[existente, COLUNAS_DA_COLETA] = [linha[coluna] for coluna in COLUNAS_DA_COLETA]
+            valores = [linha[coluna] for coluna in COLUNAS_DA_COLETA]
+            if linha["valor_horario"] in ("", None):
+                valores[COLUNAS_DA_COLETA.index("valor_horario")] = (
+                    df.loc[existente, "valor_horario"].iloc[0]
+                )
+            df.loc[existente, COLUNAS_DA_COLETA] = valores
             conhecidas = [coluna for coluna in COLUNAS_DA_ARENA if linha[coluna]]
             if conhecidas:
                 df.loc[existente, conhecidas] = [linha[coluna] for coluna in conhecidas]
