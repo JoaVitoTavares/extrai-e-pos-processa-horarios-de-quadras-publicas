@@ -34,6 +34,38 @@ def test_outside_night_access_stays_allowed(hour):
     assert access_windows.night_access_allowed(_moment(hour)) is True
 
 
+def test_allowed_night_hour_covers_the_whole_hour():
+    assert access_windows.night_access_allowed(_moment(0, 59)) is True
+    assert access_windows.night_access_allowed(_moment(3, 59)) is True
+    assert access_windows.night_access_allowed(_moment(2, 59)) is False
+
+
+def test_naive_moment_is_read_as_sao_paulo():
+    naive = datetime(2026, 10, 3, 1, 30)
+    local = access_windows.local_now(naive)
+
+    assert local.tzinfo == ZONE
+    assert (local.hour, local.minute) == (1, 30)
+    assert access_windows.night_access_allowed(naive) is False
+
+
+def test_missing_clock_uses_sao_paulo_not_utc(monkeypatch):
+    seen = []
+
+    class Clock:
+        @staticmethod
+        def now(tz=None):
+            seen.append(tz)
+            if tz is None:
+                return datetime(2026, 10, 3, 2, 0, tzinfo=ZoneInfo("UTC"))
+            return datetime(2026, 10, 3, 2, 0, tzinfo=tz)
+
+    monkeypatch.setattr(access_windows, "datetime", Clock)
+
+    assert access_windows.night_access_allowed() is False
+    assert seen == [ZONE]
+
+
 def test_night_uses_sao_paulo_timezone_not_utc():
     utc = datetime(2026, 10, 3, 4, 0, tzinfo=ZoneInfo("UTC"))
     assert utc.astimezone(ZONE).hour == 1
