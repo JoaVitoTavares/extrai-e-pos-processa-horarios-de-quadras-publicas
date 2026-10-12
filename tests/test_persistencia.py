@@ -228,6 +228,51 @@ def test_primeira_coleta_carimbada_uma_vez_so(tmp_path):
     assert df.loc[0, "ultima_atualizacao"] == "2026-08-07T12:00:00"
 
 
+def test_preco_lido_sobrevive_quando_a_reserva_nao_traz_valor(tmp_path):
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre", "valor": 150.0}])],
+        str(tmp_path), AGORA,
+    )
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}])],
+        str(tmp_path), datetime(2026, 8, 7, 17, 0),
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "status"] == "Indisponível"
+    assert df.loc[0, "reservado_em"] == "2026-08-07T17:00:00"
+    assert df.loc[0, "valor_horario"] == "150.0"
+
+
+def test_releitura_sem_preco_nao_apaga_o_valor_ja_gravado(tmp_path):
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre", "valor": 150.0}])],
+        str(tmp_path), AGORA,
+    )
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])],
+        str(tmp_path), datetime(2026, 8, 7, 9, 0),
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "valor_horario"] == "150.0"
+    assert df.loc[0, "ultima_atualizacao"] == "2026-08-07T09:00:00"
+
+
+def test_preco_novo_substitui_o_que_ja_estava_gravado(tmp_path):
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre", "valor": 150.0}])],
+        str(tmp_path), AGORA,
+    )
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre", "valor": 80.0}])],
+        str(tmp_path), datetime(2026, 8, 7, 9, 0),
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "valor_horario"] == "80.0"
+
+
 def test_reserva_detectada_quando_o_horario_livre_vira_indisponivel(tmp_path):
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])], str(tmp_path), AGORA
