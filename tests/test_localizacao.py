@@ -105,6 +105,23 @@ def test_resposta_sem_coordenada_falha_alto(respostas):
         localizacao.geocodificar(ENDERECO)
 
 
+def test_coordenada_ilegivel_nao_desce_para_a_consulta_seguinte(monkeypatch):
+    consultas = []
+
+    def get_falso(url, **kwargs):
+        consultas.append(kwargs["params"]["q"])
+        if consultas[-1] == ENDERECO:
+            return RespostaFalsa([{"lat": "abc", "lon": "-50.8", "address": {"town": "Parobé"}}])
+        return RespostaFalsa([ACHADO])
+
+    monkeypatch.setattr(requests, "get", get_falso)
+
+    with pytest.raises(ValueError, match="formato inesperado"):
+        localizacao.geocodificar(ENDERECO)
+
+    assert consultas == [ENDERECO]
+
+
 def test_erro_http_sobe(respostas):
     chamadas, get_falso = respostas
     get_falso.resposta = RespostaFalsa([ACHADO], erro=requests.HTTPError("500"))

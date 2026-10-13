@@ -10,7 +10,7 @@ from extrator import arena_extractor
 from extrator import config
 from extrator import weather_collector
 import main
-from test_main import ARENA, LOCAL, quadra
+from test_main import ARENA, LOCAL, OUTRA_ARENA, quadra
 
 ZONE = ZoneInfo("America/Sao_Paulo")
 DAY = date(2026, 10, 3)
@@ -136,3 +136,40 @@ def test_next_day_waits_until_the_arenas_broken_time(monkeypatch, tmp_path):
     main.main()
 
     assert sleeps == [18 * 60]
+
+
+def test_next_day_each_arena_waits_its_own_peak_time(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "ARENAS", [ARENA, OUTRA_ARENA])
+    monkeypatch.setattr(main, "DIRETORIO_EXTRACOES", str(tmp_path))
+    monkeypatch.setattr(main, "DIRETORIO_LOGS", str(tmp_path))
+    monkeypatch.setattr(main, "ARENAS_EM_PARALELO", 1)
+    monkeypatch.setattr("sys.argv", ["main.py", "--de", "1", "--ate", "1"])
+    now = _moment(7, 0)
+    monkeypatch.setattr(main, "current_peak_window", lambda moment=None: "morning")
+    monkeypatch.setattr(main, "local_now", lambda moment=None: now)
+    sleeps = []
+    monkeypatch.setattr(main, "sleep_seconds", sleeps.append)
+    monkeypatch.setattr(arena_extractor, "resolver_local", lambda *a, **k: LOCAL)
+    monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda *a, **k: ["um.csv"])
+    monkeypatch.setattr(weather_collector, "collect_weather", lambda *a, **k: "clima.csv")
+    monkeypatch.setattr(weather_collector, "collect_forecast", lambda *a, **k: "previsao.csv")
+    monkeypatch.setattr(
+        arena_extractor, "TratamentoDeDados",
+        type("T", (), {"__init__": lambda self, *a, **k: None, "aplicar": lambda self, now=None: ["um.csv"]}),
+    )
+    monkeypatch.setattr(main, "wait_between_accesses", lambda: None)
+    monkeypatch.setattr(
+        arena_extractor.ArenaExtractor, "_collect_courts",
+        lambda self: [quadra()],
+    )
+
+    main.main()
+
+    morning_sp, _ = access_windows.peak_times_for_arena("sp-sports", now.date())
+    morning_parobe, _ = access_windows.peak_times_for_arena("parobe", now.date())
+    expected = [
+        (morning_sp.hour - 7) * 3600 + morning_sp.minute * 60,
+        (morning_parobe.hour - 7) * 3600 + morning_parobe.minute * 60,
+    ]
+    assert sleeps == expected
+    assert expected[0] != expected[1]

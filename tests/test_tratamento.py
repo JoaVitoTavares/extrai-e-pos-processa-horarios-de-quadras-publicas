@@ -174,6 +174,30 @@ def test_leitura_velha_demais_e_ignorada(extracoes):
     assert reservas(extracoes).loc[0, "antes_do_jogo_clima"] == ""
 
 
+def test_leitura_exatamente_uma_hora_antes_ainda_entra(tmp_path):
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])],
+        str(tmp_path), datetime(2026, 8, 7, 8, 0),
+    )
+    agora = datetime(2026, 8, 7, 19, 0)
+    gravar_leitura(dict(ATUAL, time="2026-08-07T18:00"), str(tmp_path), agora)
+    TratamentoDeDados(str(tmp_path)).aplicar(agora)
+
+    assert reservas(tmp_path).loc[0, "antes_do_jogo_clima"] == "Encoberto"
+
+
+def test_leitura_um_minuto_alem_da_tolerancia_nao_entra(tmp_path):
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])],
+        str(tmp_path), datetime(2026, 8, 7, 8, 0),
+    )
+    agora = datetime(2026, 8, 7, 19, 0)
+    gravar_leitura(dict(ATUAL, time="2026-08-07T17:59"), str(tmp_path), agora)
+    TratamentoDeDados(str(tmp_path)).aplicar(agora)
+
+    assert reservas(tmp_path).loc[0, "antes_do_jogo_clima"] == ""
+
+
 def test_leitura_futura_e_ignorada(extracoes):
     gravar_leitura(
         dict(ATUAL, time="2026-08-07T23:00", weather_code=95),
@@ -259,6 +283,45 @@ def test_reserva_sem_observacao_por_perto_fica_sem_o_bloco(extracoes):
     TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 19, 0))
 
     assert reservas(extracoes).loc[0, "na_hora_da_reserva_clima"] == ""
+
+
+def test_congelamento_respeita_o_limite_de_uma_hora(tmp_path):
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [
+            {"hora": "20:00", "status": "Livre"},
+            {"hora": "21:00", "status": "Livre"},
+        ])],
+        str(tmp_path), datetime(2026, 8, 7, 8, 0),
+    )
+    gravar_leitura(
+        dict(ATUAL, time="2026-08-07T09:00", weather_code=61),
+        str(tmp_path), datetime(2026, 8, 7, 9, 0),
+    )
+    reservar(tmp_path, hora="20:00", quando=datetime(2026, 8, 7, 10, 0))
+    reservar(tmp_path, hora="21:00", quando=datetime(2026, 8, 7, 10, 1))
+    TratamentoDeDados(str(tmp_path)).aplicar(datetime(2026, 8, 7, 10, 1))
+    df = reservas(tmp_path).set_index("horario_inicio")
+
+    assert df.loc["20:00", "reservado_em"] == "2026-08-07T10:00:00"
+    assert df.loc["21:00", "reservado_em"] == "2026-08-07T10:01:00"
+    assert df.loc["20:00", "na_hora_da_reserva_clima"] == "Chuva fraca"
+    assert df.loc["21:00", "na_hora_da_reserva_clima"] == ""
+
+
+def test_empate_de_proximidade_fica_com_a_leitura_gravada_antes(tmp_path):
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])],
+        str(tmp_path), datetime(2026, 8, 7, 8, 0),
+    )
+    for hora, codigo in [("10:30", 3), ("10:50", 95)]:
+        gravar_leitura(
+            dict(ATUAL, time=f"2026-08-07T{hora}", weather_code=codigo),
+            str(tmp_path), datetime(2026, 8, 7, 10, 50),
+        )
+    reservar(tmp_path, quando=datetime(2026, 8, 7, 10, 40))
+    TratamentoDeDados(str(tmp_path)).aplicar(datetime(2026, 8, 7, 10, 50))
+
+    assert reservas(tmp_path).loc[0, "na_hora_da_reserva_clima"] == "Encoberto"
 
 
 def test_previsao_congelada_na_reserva_recem_detectada(extracoes):
