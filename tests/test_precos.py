@@ -27,6 +27,10 @@ def test_preco_do_slot_prefere_sessenta_minutos():
     assert courts_collector._slot_price(["30 min. R$80", "60 min. R$150"]) == 150.0
 
 
+def test_sessenta_minutos_sem_numero_nao_herda_outra_duracao():
+    assert courts_collector._slot_price(["60 min. R$ .", "30 min. R$ 80"]) is None
+
+
 def test_preco_do_slot_usa_a_primeira_com_preco_sem_sessenta():
     assert courts_collector._slot_price(["90 min. R$200", "120 min. R$260"]) == 200.0
 

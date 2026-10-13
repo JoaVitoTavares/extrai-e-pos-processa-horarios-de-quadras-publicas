@@ -283,6 +283,26 @@ def test_reserva_detectada_nao_e_reescrita_pelas_rodadas_seguintes(tmp_path):
     assert df.loc[0, "antecedencia_horas"] == "3.00"
 
 
+def test_cancelamento_depois_do_horario_nao_apaga_a_reserva(tmp_path):
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])],
+        str(tmp_path), AGORA,
+    )
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}])],
+        str(tmp_path), datetime(2026, 8, 7, 17, 0),
+    )
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])],
+        str(tmp_path), datetime(2026, 8, 7, 20, 30),
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "status"] == "Indisponível"
+    assert df.loc[0, "reservado_em"] == "2026-08-07T17:00:00"
+    assert df.loc[0, "antecedencia_horas"] == "3.00"
+
+
 def test_cancelamento_apaga_o_que_a_reserva_tinha_deixado(tmp_path):
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])], str(tmp_path), AGORA
