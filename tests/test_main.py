@@ -414,3 +414,62 @@ def test_periodo_com_aviso_imprime_so_o_aviso(capsys):
 
     assert "Não foi possível coletar" in saida
     assert "Livres:" not in saida
+
+
+def test_de_ate_e_proxy_chegam_na_coleta(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv",
+        ["main.py", "--de", "1", "--ate", "4", "--proxy", "http://proxy.local:8080"],
+    )
+    monkeypatch.setattr(main, "current_peak_window", lambda moment=None: "morning")
+    monkeypatch.setattr(main, "sleep_seconds", lambda seconds: None)
+    recebido = {}
+
+    def coletar(sport, arena_url, period=None, headless=True, days_ahead=None, days_from=None,
+                types=None, proxy=None, **kwargs):
+        recebido.update(
+            days_ahead=days_ahead, days_from=days_from, proxy=proxy, headless=headless,
+            use_stealth=kwargs.get("use_stealth"), slow_mo=kwargs.get("slow_mo"),
+            viewport=kwargs.get("viewport"), user_agent=kwargs.get("user_agent"),
+        )
+        return [quadra()]
+
+    monkeypatch.setattr(arena_extractor, "list_sports", lambda arena_url: ["Grama 5"])
+    monkeypatch.setattr(arena_extractor, "collect_schedules", coletar)
+    monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda *args, **kwargs: ["um.csv"])
+
+    main.main()
+
+    assert recebido["days_from"] == 1
+    assert recebido["days_ahead"] == 4
+    assert recebido["proxy"] == "http://proxy.local:8080"
+    assert recebido["headless"] is True
+    assert recebido["use_stealth"] is True
+    assert recebido["slow_mo"] == 50
+    assert recebido["viewport"]["width"] >= 1280
+    assert "Chrome/" in recebido["user_agent"]
+
+
+def test_tres_arenas_respeitam_o_teto_de_paralelo(monkeypatch, tmp_path):
+    terceira = {"nome": "Arena Três", "url": "https://webarena.app/arena/arena-tres"}
+    monkeypatch.setattr(main, "ARENAS", [ARENA, OUTRA_ARENA, terceira])
+    monkeypatch.setattr(main, "ARENAS_EM_PARALELO", 2)
+    pedido = {}
+    original = main.ThreadPoolExecutor
+
+    class Vigia(original):
+        def __init__(self, max_workers=None, **kwargs):
+            pedido["max_workers"] = max_workers
+            super().__init__(max_workers=max_workers, **kwargs)
+
+    monkeypatch.setattr(main, "ThreadPoolExecutor", Vigia)
+    monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda *args, **kwargs: ["um.csv"])
+    monkeypatch.setattr(
+        arena_extractor.ArenaExtractor, "_collect_courts", lambda self: [quadra()]
+    )
+
+    main.main()
+    df = pd.read_csv(tmp_path / "verificacoes.csv", dtype=str, keep_default_na=False)
+
+    assert pedido["max_workers"] == 2
+    assert sorted(df["arena"]) == ["Arena Parobé", "Arena Três", "SP Sports"]

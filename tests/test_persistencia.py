@@ -438,3 +438,47 @@ def test_log_cria_o_diretorio_se_nao_existir(tmp_path):
     caminho = persistencia.registrar_verificacao("SP Sports", ["Areia 1"], str(destino), AGORA)
 
     assert os.path.exists(caminho)
+
+
+def test_horario_que_continua_indisponivel_nao_vira_reserva(tmp_path):
+    ocupado = [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}])]
+    persistencia.salvar_extracao(ocupado, str(tmp_path), AGORA)
+    caminho = persistencia.salvar_extracao(
+        ocupado, str(tmp_path), datetime(2026, 8, 7, 12, 0)
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert len(df) == 1
+    assert df.loc[0, "status"] == "Indisponível"
+    assert df.loc[0, "reservado_em"] == ""
+    assert df.loc[0, "antecedencia_horas"] == ""
+    assert df.loc[0, "primeira_coleta"] == "2026-08-07T08:00:00"
+    assert df.loc[0, "ultima_atualizacao"] == "2026-08-07T12:00:00"
+
+
+def test_horario_ja_iniciado_grava_na_primeira_vez_e_nao_trava_o_seguinte(tmp_path):
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "07:00", "status": "Livre"}], periodo="Manhã")],
+        str(tmp_path), AGORA,
+    )[0]
+    persistencia.salvar_extracao(
+        [
+            quadra(
+                "Areia 1 - Interna",
+                [{"hora": "07:00", "status": "Indisponível"}],
+                periodo="Tarde",
+            ),
+            quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}], periodo="Noite"),
+        ],
+        str(tmp_path),
+        datetime(2026, 8, 7, 18, 0),
+    )
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False).set_index("horario_inicio")
+
+    assert df.loc["07:00", "status"] == "Livre"
+    assert df.loc["07:00", "periodo"] == "Manhã"
+    assert df.loc["07:00", "reservado_em"] == ""
+    assert df.loc["07:00", "ultima_atualizacao"] == "2026-08-07T08:00:00"
+    assert df.loc["20:00", "status"] == "Livre"
+    assert df.loc["20:00", "periodo"] == "Noite"
+    assert df.loc["20:00", "primeira_coleta"] == "2026-08-07T18:00:00"
