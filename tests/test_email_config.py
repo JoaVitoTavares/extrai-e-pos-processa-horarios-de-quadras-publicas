@@ -48,3 +48,13 @@ def test_loads_env_file_without_sending(tmp_path, monkeypatch):
 
     assert os.environ["EMAIL_SMTP_HOST"] == "smtp.local"
     assert os.environ["EMAIL_SMTP_PORT"] == "465"
+
+
+def test_dotenv_preserva_senha_com_igual_e_aspas(tmp_path, monkeypatch):
+    path = tmp_path / ".env"
+    path.write_text('EMAIL_SMTP_PASSWORD = "ab=cd"\n', encoding="utf-8")
+    monkeypatch.delenv("EMAIL_SMTP_PASSWORD", raising=False)
+
+    email_config.load_dotenv(path)
+
+    assert os.environ["EMAIL_SMTP_PASSWORD"] == "ab=cd"

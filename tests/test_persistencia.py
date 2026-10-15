@@ -433,6 +433,50 @@ def test_cada_arena_tem_a_sua_linha_no_log(tmp_path):
     assert list(df["quadras"]) == ["Areia 1", "Grama 5"]
 
 
+def test_virada_em_reserva_preserva_o_clima_pre_jogo(tmp_path):
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])],
+        str(tmp_path), AGORA,
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+    df.loc[0, persistencia.COLUNAS_DO_CLIMA_ANTES_DO_JOGO] = [
+        "Encoberto", "24.4", "76", "0.0", "13.1",
+    ]
+    df.to_csv(caminho, index=False)
+
+    quando = datetime(2026, 8, 7, 19, 59, 57)
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}])],
+        str(tmp_path), quando,
+    )
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "reservado_em"] == "2026-08-07T19:59:57"
+    assert df.loc[0, "antecedencia_horas"] == "0.00"
+    assert df.loc[0, "periodo_da_reserva"] == "Noite"
+    assert df.loc[0, "antes_do_jogo_clima"] == "Encoberto"
+    assert df.loc[0, "antes_do_jogo_temperatura"] == "24.4"
+    assert df.loc[0, "antes_do_jogo_umidade"] == "76"
+
+
+def test_periodo_do_horario_futuro_e_atualizado_sem_duplicar(tmp_path):
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre"}], periodo="Tarde")],
+        str(tmp_path), AGORA,
+    )
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "17:00", "status": "Livre"}], periodo="Noite")],
+        str(tmp_path), datetime(2026, 8, 7, 12, 0),
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert len(df) == 1
+    assert df.loc[0, "periodo"] == "Noite"
+    assert df.loc[0, "horario_inicio"] == "17:00"
+    assert df.loc[0, "horario_fim"] == "18:00"
+    assert df.loc[0, "reservado_em"] == ""
+
+
 def test_log_cria_o_diretorio_se_nao_existir(tmp_path):
     destino = tmp_path / "ainda-nao-existe"
     caminho = persistencia.registrar_verificacao("SP Sports", ["Areia 1"], str(destino), AGORA)

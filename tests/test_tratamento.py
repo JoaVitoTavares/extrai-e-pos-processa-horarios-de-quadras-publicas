@@ -329,6 +329,37 @@ def test_sem_previsao_o_clima_observado_continua_sendo_aplicado(extracoes):
     assert linha["previsao_para_o_jogo_no_momento_da_reserva_clima"] == ""
 
 
+def test_so_a_previsao_congela_na_reserva_sem_leitura_atual(tmp_path):
+    gravar_previsao(PREVISAO, str(tmp_path), datetime(2026, 8, 7, 10, 0))
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])],
+        str(tmp_path), datetime(2026, 8, 7, 8, 0),
+    )
+    reservar(tmp_path)
+    alterados = TratamentoDeDados(str(tmp_path)).aplicar(datetime(2026, 8, 7, 10, 0))
+    linha = reservas(tmp_path).loc[0]
+
+    assert linha["antes_do_jogo_clima"] == ""
+    assert linha["na_hora_da_reserva_clima"] == ""
+    assert linha["previsao_para_o_jogo_no_momento_da_reserva_clima"] == "Chuva moderada"
+    assert linha["previsao_para_o_jogo_no_momento_da_reserva_temperatura"] == "18.9"
+    assert [caminho.split("/")[-1] for caminho in alterados] == ["areia-1-interna-extracoes.csv"]
+
+
+def test_reserva_as_00_30_usa_a_previsao_da_hora_zero(tmp_path):
+    gravar_previsao(
+        dict(PREVISAO, time=[f"{DIA}T00:00"]), str(tmp_path), datetime(2026, 8, 6, 22, 0),
+    )
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "00:30", "status": "Livre"}])],
+        str(tmp_path), datetime(2026, 8, 6, 20, 0),
+    )
+    reservar(tmp_path, hora="00:30", quando=datetime(2026, 8, 6, 21, 0))
+    TratamentoDeDados(str(tmp_path)).aplicar(datetime(2026, 8, 6, 21, 0))
+
+    assert reservas(tmp_path).loc[0, "previsao_para_o_jogo_no_momento_da_reserva_clima"] == "Chuva moderada"
+
+
 def test_devolve_so_os_arquivos_alterados(extracoes):
     persistencia.salvar_extracao(
         [quadra("Areia 3 - Interna", [{"hora": "23:00", "status": "Livre"}])],
