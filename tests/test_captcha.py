@@ -27,6 +27,11 @@ def test_ordinary_page_is_not_captcha():
     assert captcha.captcha_detected(FakePage("Horários disponíveis para a quadra")) is False
 
 
+def test_blank_page_is_not_captcha():
+    assert captcha.captcha_detected(FakePage("")) is False
+    assert captcha.captcha_detected(FakePage(None)) is False
+
+
 class _Browser:
     def launch(self, **kwargs):
         return self

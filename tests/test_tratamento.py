@@ -294,6 +294,60 @@ def test_horario_livre_nao_recebe_previsao(extracoes):
     assert reservas(extracoes).loc[0, "previsao_para_o_jogo_no_momento_da_reserva_clima"] == ""
 
 
+def test_hora_de_um_digito_casa_com_a_previsao_da_hora_cheia(extracoes):
+    gravar_previsao(
+        dict(PREVISAO, time=[f"{DIA}T09:00", f"{DIA}T10:00"], weather_code=[1, 3]),
+        str(extracoes), datetime(2026, 8, 7, 8, 0),
+    )
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "9:00", "status": "Livre"}])],
+        str(extracoes), datetime(2026, 8, 7, 7, 0),
+    )
+    reservar(extracoes, hora="9:00", quando=datetime(2026, 8, 7, 8, 30))
+    TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 8, 30))
+    df = reservas(extracoes).set_index("horario_inicio")
+
+    assert df.loc["9:00", "horario_fim"] == "10:00"
+    assert df.loc["9:00", "previsao_para_o_jogo_no_momento_da_reserva_clima"] == "Predomínio de sol"
+
+
+def test_clima_pre_jogo_permanece_depois_que_a_janela_fecha(extracoes):
+    TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 17, 0))
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "23:00", "status": "Livre"}])],
+        str(extracoes), datetime(2026, 8, 7, 17, 30),
+    )
+    gravar_leitura(
+        dict(ATUAL, time="2026-08-07T21:00", weather_code=95, temperature_2m=11.0),
+        str(extracoes), datetime(2026, 8, 7, 21, 0),
+    )
+    TratamentoDeDados(str(extracoes)).aplicar(datetime(2026, 8, 7, 21, 0))
+    df = reservas(extracoes).set_index("horario_inicio")
+
+    assert df.loc["20:00", "antes_do_jogo_clima"] == "Encoberto"
+    assert df.loc["20:00", "antes_do_jogo_temperatura"] == "24.4"
+    assert df.loc["23:00", "antes_do_jogo_clima"] == "Trovoada"
+    assert df.loc["23:00", "antes_do_jogo_temperatura"] == "11.0"
+
+
+def test_csv_antigo_sem_colunas_de_clima_recebe_a_previsao(tmp_path):
+    caminho = tmp_path / "areia-1-interna-extracoes.csv"
+    caminho.write_text(
+        "data,esporte,horario_inicio,status,reservado_em\n"
+        "2026-08-07,Vôlei de praia,20:00,Indisponível,2026-08-07T10:00:00\n",
+        encoding="utf-8",
+    )
+    gravar_previsao(PREVISAO, str(tmp_path), datetime(2026, 8, 7, 10, 0))
+    alterados = TratamentoDeDados(str(tmp_path)).aplicar(datetime(2026, 8, 7, 10, 0))
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert len(alterados) == 1
+    assert df.loc[0, "previsao_para_o_jogo_no_momento_da_reserva_clima"] == "Chuva moderada"
+    assert df.loc[0, "previsao_para_o_jogo_no_momento_da_reserva_temperatura"] == "18.9"
+    assert df.loc[0, "status"] == "Indisponível"
+    assert df.loc[0, "reservado_em"] == "2026-08-07T10:00:00"
+
+
 def test_reserva_de_meia_hora_pega_a_previsao_da_hora_cheia(extracoes):
     gravar_previsao(PREVISAO, str(extracoes), datetime(2026, 8, 7, 10, 0))
     persistencia.salvar_extracao(
