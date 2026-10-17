@@ -105,6 +105,10 @@ def test_tipos_ausentes_reconhece_o_nome_sem_acento():
     assert "Vôlei de praia" not in courts_collector.missing_court_types(["Volei de praia"])
 
 
+def test_futsal_cobre_o_tipo_futebol_de_salao():
+    assert courts_collector.missing_court_types(["Futsal"], ["Futebol de salão"]) == []
+
+
 @pytest.mark.parametrize(
     "do_site, tipos, esperado",
     [

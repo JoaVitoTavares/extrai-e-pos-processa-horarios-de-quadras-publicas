@@ -329,6 +329,37 @@ def test_sem_previsao_o_clima_observado_continua_sendo_aplicado(extracoes):
     assert linha["previsao_para_o_jogo_no_momento_da_reserva_clima"] == ""
 
 
+def test_nova_reserva_congela_o_clima_da_segunda_virada(tmp_path):
+    diretorio = str(tmp_path)
+    livre = [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])]
+    ocupado = [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}])]
+    persistencia.salvar_extracao(livre, diretorio, datetime(2026, 8, 7, 8, 0))
+    gravar_leitura(
+        dict(ATUAL, time="2026-08-07T10:00", weather_code=61, temperature_2m=19.8),
+        diretorio, datetime(2026, 8, 7, 10, 0),
+    )
+    gravar_previsao(PREVISAO, diretorio, datetime(2026, 8, 7, 10, 0))
+    persistencia.salvar_extracao(ocupado, diretorio, datetime(2026, 8, 7, 10, 0))
+    TratamentoDeDados(diretorio).aplicar(datetime(2026, 8, 7, 10, 0))
+
+    persistencia.salvar_extracao(livre, diretorio, datetime(2026, 8, 7, 16, 0))
+    gravar_leitura(
+        dict(ATUAL, time="2026-08-07T17:45", weather_code=0, temperature_2m=22.0),
+        diretorio, datetime(2026, 8, 7, 17, 45),
+    )
+    revisada = dict(PREVISAO, weather_code=[0, 0, 0], temperature_2m=[30.0, 30.0, 30.0])
+    gravar_previsao(revisada, diretorio, datetime(2026, 8, 7, 17, 50))
+    persistencia.salvar_extracao(ocupado, diretorio, datetime(2026, 8, 7, 17, 59))
+    TratamentoDeDados(diretorio).aplicar(datetime(2026, 8, 7, 17, 59))
+    linha = reservas(tmp_path).loc[0]
+
+    assert linha["reservado_em"] == "2026-08-07T17:59:00"
+    assert linha["na_hora_da_reserva_clima"] == "Céu limpo"
+    assert linha["na_hora_da_reserva_temperatura"] == "22.0"
+    assert linha["previsao_para_o_jogo_no_momento_da_reserva_clima"] == "Céu limpo"
+    assert linha["previsao_para_o_jogo_no_momento_da_reserva_temperatura"] == "30.0"
+
+
 def test_devolve_so_os_arquivos_alterados(extracoes):
     persistencia.salvar_extracao(
         [quadra("Areia 3 - Interna", [{"hora": "23:00", "status": "Livre"}])],

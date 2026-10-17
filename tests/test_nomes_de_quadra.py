@@ -38,6 +38,7 @@ def test_caminho_csv_respeita_o_diretorio():
         ("FUTSAL - Interna", "true"),
         ("Quadra coberta 2", "true"),
         ("Ginásio 51 99870-1500", "true"),
+        ("Ginásio Externo", "false"),
         ("GRAMA 7 - EXTERNA", "false"),
         ("Areia 4 - EXTERNA", "false"),
         ("Quadra descoberta 2", "false"),

@@ -283,6 +283,51 @@ def test_reserva_detectada_nao_e_reescrita_pelas_rodadas_seguintes(tmp_path):
     assert df.loc[0, "antecedencia_horas"] == "3.00"
 
 
+def test_nova_reserva_depois_do_cancelamento_carimba_de_novo(tmp_path):
+    livres = [
+        {"hora": "20:00", "status": "Livre"},
+        {"hora": "21:00", "status": "Livre"},
+    ]
+    ocupados = [
+        {"hora": "20:00", "status": "Indisponível"},
+        {"hora": "21:00", "status": "Indisponível"},
+    ]
+    persistencia.salvar_extracao([quadra("Areia 1 - Interna", livres)], str(tmp_path), AGORA)
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", ocupados)], str(tmp_path), datetime(2026, 8, 7, 10, 0)
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+    df.loc[df["horario_inicio"] == "20:00", persistencia.COLUNAS_DO_CLIMA_NA_RESERVA] = [
+        "Chuva fraca", "19.8", "76", "0.0", "13.1"
+    ]
+    df.to_csv(caminho, index=False)
+
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [
+            {"hora": "20:00", "status": "Livre"},
+            {"hora": "21:00", "status": "Indisponível"},
+        ])],
+        str(tmp_path), datetime(2026, 8, 7, 16, 0),
+    )
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", ocupados)], str(tmp_path), datetime(2026, 8, 7, 17, 59)
+    )
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False).set_index("horario_inicio")
+
+    assert len(df) == 2
+    refeito = df.loc["20:00"]
+    assert refeito["status"] == "Indisponível"
+    assert refeito["reservado_em"] == "2026-08-07T17:59:00"
+    assert refeito["periodo_da_reserva"] == "Tarde"
+    assert refeito["antecedencia_horas"] == "2.02"
+    assert refeito["primeira_coleta"] == "2026-08-07T08:00:00"
+    assert refeito["na_hora_da_reserva_clima"] == ""
+    vizinho = df.loc["21:00"]
+    assert vizinho["reservado_em"] == "2026-08-07T10:00:00"
+    assert vizinho["antecedencia_horas"] == "11.00"
+    assert vizinho["periodo_da_reserva"] == "Manhã"
+
+
 def test_cancelamento_apaga_o_que_a_reserva_tinha_deixado(tmp_path):
     persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Livre"}])], str(tmp_path), AGORA
