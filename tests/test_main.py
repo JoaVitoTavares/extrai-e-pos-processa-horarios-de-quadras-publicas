@@ -328,6 +328,22 @@ def test_periodo_com_aviso_nao_entra_nas_quadras_verificadas():
     assert arena_extractor.ArenaExtractor.verified_court_names(resultados) == ["Areia 1 - Interna"]
 
 
+def test_a_mesma_quadra_em_varios_periodos_conta_uma_vez():
+    aviso = "Não foi possível coletar os horários."
+    resultados = [
+        quadra("Areia 1 - Interna"),
+        quadra("Areia 1 - Interna"),
+        quadra("Areia 2 - Externa", aviso=aviso),
+        quadra("Areia 2 - Externa"),
+        quadra("Areia 3 - Interna", aviso=aviso),
+        quadra(""),
+    ]
+
+    assert arena_extractor.ArenaExtractor.verified_court_names(resultados) == [
+        "Areia 1 - Interna", "Areia 2 - Externa",
+    ]
+
+
 def test_sai_com_erro_quando_nao_grava_nada(monkeypatch):
     monkeypatch.setattr(arena_extractor.ArenaExtractor, "_collect_courts", lambda self: [])
     monkeypatch.setattr(arena_extractor, "salvar_extracao", lambda r, diretorio, **kwargs: [])

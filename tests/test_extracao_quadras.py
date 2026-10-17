@@ -107,6 +107,20 @@ def test_quadra_unica_continua_funcionando(carregar_fixture):
     assert [h["hora"] for h in quadras[0]["horarios"] if h["status"] == "Livre"] == ["22:30"]
 
 
+def test_status_sem_acento_e_sem_espaco_em_volta_do_traco_ainda_sai(pagina):
+    pagina.set_content(
+        '<div class="bubble-rg-flex-row">'
+        '<div class="group-item">Quadra 1\n8:00-indisponivel\n9:30 - livre</div>'
+        "</div>"
+    )
+    quadras = courts_collector._extract_courts(pagina, "Grama 5", "Manhã", DIA)
+
+    assert [(h["hora"], h["status"]) for h in quadras[0]["horarios"]] == [
+        ("8:00", "Indisponivel"),
+        ("9:30", "Livre"),
+    ]
+
+
 def test_pagina_sem_quadras_devolve_aviso(pagina):
     pagina.set_content("<div></div>")
     quadras = courts_collector._extract_courts(pagina, "Futebol de salão", "Manhã", DIA)
