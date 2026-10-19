@@ -17,6 +17,7 @@ except ImportError:
 
 from extrator.config import (
     API_INIT_PATH,
+    COLLECT_FOLLOWING_DAYS_PRICES,
     DAYS_AHEAD,
     DEFAULT_PERIODS,
     NAVIGATION_TIMEOUT_MS,
@@ -523,7 +524,10 @@ def collect_schedules(
                     debug(f"'{sport}': dia {day.isoformat()} pulado: {error}")
                     continue
                 results.extend(
-                    _collect_day(page, sport, day, periods, day == today, types)
+                    _collect_day(
+                        page, sport, day, periods,
+                        day == today or COLLECT_FOLLOWING_DAYS_PRICES, types,
+                    )
                 )
 
             debug(f"'{sport}': fechando navegador com {len(results)} registro(s)")
