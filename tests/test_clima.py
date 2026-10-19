@@ -154,6 +154,30 @@ def test_cria_o_diretorio_se_nao_existir(tmp_path):
     assert os.path.exists(caminho)
 
 
+def test_csv_antigo_sem_coluna_nova_conserva_a_leitura_anterior(tmp_path):
+    caminho = tmp_path / weather_collector.WEATHER_FILE
+    caminho.write_text(
+        "data_hora,coletado_em,clima,codigo_clima,temperatura,sensacao_termica,"
+        "umidade,precipitacao,velocidade_vento,latitude,longitude\n"
+        "2026-08-16T16:00,2026-08-16T16:01:00,Céu limpo,0,20.0,21.0,80,0.0,10.0,"
+        "-29.9048885,-51.1612496\n",
+        encoding="utf-8",
+    )
+
+    weather_collector.save_reading(ATUAL, LATITUDE, LONGITUDE, str(tmp_path), AGORA)
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False).set_index("data_hora")
+
+    assert list(df.columns) == [
+        coluna for coluna in weather_collector.WEATHER_COLUMNS if coluna != "data_hora"
+    ]
+    assert df.loc["2026-08-16T16:00", "clima"] == "Céu limpo"
+    assert df.loc["2026-08-16T16:00", "temperatura"] == "20.0"
+    assert df.loc["2026-08-16T16:00", "direcao_vento"] == ""
+    assert df.loc["2026-08-16T16:45", "clima"] == "Encoberto"
+    assert df.loc["2026-08-16T16:45", "direcao_vento"] == "99"
+    assert len(df) == 2
+
+
 def test_mesmo_balde_de_quinze_minutos_nao_duplica(tmp_path):
     weather_collector.save_reading(ATUAL, LATITUDE, LONGITUDE, str(tmp_path), AGORA)
     caminho = weather_collector.save_reading(
