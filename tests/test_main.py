@@ -355,6 +355,29 @@ def test_esporte_que_estoura_o_tempo_nao_derruba_os_outros(monkeypatch, capsys):
     assert "Grama 7" in capsys.readouterr().err
 
 
+def test_tipo_ausente_nao_impede_os_esportes_que_o_site_tem(monkeypatch, capsys):
+    monkeypatch.setattr(
+        arena_extractor, "list_sports",
+        lambda arena_url: ["Grama 5", "Handebol"],
+    )
+    recebidos = []
+
+    def coletar(sport, arena_url, period=None, headless=True, types=None, **kwargs):
+        recebidos.append((sport, types))
+        return [quadra(nome="Grama 5 - Interna")]
+
+    monkeypatch.setattr(arena_extractor, "collect_schedules", coletar)
+    arena = main.normalize_arena_info(dict(ARENA, tipos=["Grama 5", "Vôlei de praia"]))
+
+    resultados = arena_extractor.ArenaExtractor(arena)._collect_courts()
+    saida = capsys.readouterr().out
+
+    assert recebidos == [("Grama 5", ["Grama 5", "Vôlei de praia"])]
+    assert [q["quadra"] for q in resultados] == ["Grama 5 - Interna"]
+    assert "tipos de quadra não encontrados no site: Vôlei de praia" in saida
+    assert "Handebol" not in saida.split("não encontrados", 1)[-1]
+
+
 def test_modo_visivel_desliga_o_headless(monkeypatch):
     recebido = {}
     monkeypatch.setattr(arena_extractor, "list_sports", lambda arena_url: ["Grama 5"])

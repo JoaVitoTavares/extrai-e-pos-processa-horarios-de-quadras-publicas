@@ -107,6 +107,24 @@ def test_quadra_unica_continua_funcionando(carregar_fixture):
     assert [h["hora"] for h in quadras[0]["horarios"] if h["status"] == "Livre"] == ["22:30"]
 
 
+def test_quadra_sem_horario_nao_apaga_a_vizinha_nem_vira_aviso(pagina):
+    pagina.set_content(
+        '<div class="bubble-rg-flex-row">'
+        '<div class="group-item"><div>Areia 1 - Interna</div><div>17:00 - Livre</div></div>'
+        '<div class="group-item"><div>Areia 2 - Externa</div><div>Sem grade</div></div>'
+        "</div>"
+    )
+    quadras = courts_collector._extract_courts(pagina, "Vôlei de praia", "Noite", DIA)
+    por_nome = {quadra["quadra"]: quadra for quadra in quadras}
+
+    assert list(por_nome) == ["Areia 1 - Interna", "Areia 2 - Externa"]
+    assert por_nome["Areia 1 - Interna"]["horarios"] == [{"hora": "17:00", "status": "Livre"}]
+    assert por_nome["Areia 1 - Interna"]["aviso"] is None
+    assert por_nome["Areia 2 - Externa"]["horarios"] == []
+    assert por_nome["Areia 2 - Externa"]["aviso"] is None
+    assert por_nome["Areia 2 - Externa"]["quadra_coberta"] == "false"
+
+
 def test_pagina_sem_quadras_devolve_aviso(pagina):
     pagina.set_content("<div></div>")
     quadras = courts_collector._extract_courts(pagina, "Futebol de salão", "Manhã", DIA)

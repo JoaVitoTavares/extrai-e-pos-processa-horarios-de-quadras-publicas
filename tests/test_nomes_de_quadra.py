@@ -58,6 +58,7 @@ def test_quadra_coberta_classifica_pelo_nome(nome, esperado):
         ("Grama 7", "GRAMA 7 - EXTERNA", "Grama 7"),
         ("Grama 5", "GRAMA 5 - Interna", "Grama 5"),
         ("Volei de praia", "Areia 2 - Interna", "Vôlei de praia"),
+        ("Vôlei de praia", "FUTSAL - Interna", "Vôlei de praia"),
         ("Handebol", "Quadra 1", "Handebol"),
         ("Esporte novo", "FUTSAL - Interna", "Futebol de salão"),
     ],
