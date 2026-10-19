@@ -155,7 +155,7 @@ COURT_TYPES = ["Vôlei de praia", "Futebol de salão", "Grama 7", "Grama 5"]
 DEFAULT_PERIODS = ["Manhã", "Tarde", "Noite"]
 NAVIGATION_TIMEOUT_MS = 30_000
 DAYS_AHEAD = 5
-COLLECT_FOLLOWING_DAYS_PRICES = False
+COLLECT_FOLLOWING_DAYS_PRICES = True
 ARENAS_EM_PARALELO = 4
 
 DIRETORIO_EXTRACOES = ".extracoes"

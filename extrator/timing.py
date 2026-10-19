@@ -5,6 +5,8 @@ import time
 
 from extrator.config import ACCESS_INTERVAL_MAX_S, ACCESS_INTERVAL_MIN_S
 
+_click_pauses_enabled = True
+
 
 def random_access_interval_s(rand_num_gen=None) -> float:
     """Sorteia a pausa entre requisições, de alguns segundos até no máximo 3 minutos."""
@@ -21,4 +23,15 @@ def wait_between_accesses(sleeper=None, rand_num_gen=None) -> float:
 
 def wait_between_clicks(sleeper=None, rand_num_gen=None) -> float:
     """Pausa entre cliques e interações com o mesmo intervalo sorteado entre requisições."""
+    if not _click_pauses_enabled:
+        return 0.0
     return wait_between_accesses(sleeper=sleeper, rand_num_gen=rand_num_gen)
+
+
+def disable_click_pauses() -> None:
+    global _click_pauses_enabled
+    _click_pauses_enabled = False
+
+
+def click_pauses_enabled() -> bool:
+    return _click_pauses_enabled
