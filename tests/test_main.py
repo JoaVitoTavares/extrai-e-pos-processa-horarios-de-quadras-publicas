@@ -9,7 +9,7 @@ import requests
 from playwright.sync_api import TimeoutError as PWTimeout
 
 import main
-from extrator import arena_extractor, weather_collector
+from extrator import arena_extractor, timing, weather_collector
 ARENA = {"nome": "SP Sports", "url": "https://webarena.app/arena/sp-sports"}
 OUTRA_ARENA = {"nome": "Arena Parobé", "url": "https://webarena.app/arena/parobe"}
 LOCAL = {
@@ -414,3 +414,34 @@ def test_periodo_com_aviso_imprime_so_o_aviso(capsys):
 
     assert "Não foi possível coletar" in saida
     assert "Livres:" not in saida
+
+
+def test_active_is_off_by_default():
+    assert main.parse_arguments([]).active is False
+
+
+def test_active_flag_turns_active_on():
+    assert main.parse_arguments(["--active"]).active is True
+
+
+def test_visible_mode_alone_keeps_active_off():
+    arguments = main.parse_arguments(["--ver"])
+
+    assert arguments.ver is True
+    assert arguments.active is False
+
+
+def test_run_with_active_disables_click_pauses(monkeypatch, etapas):
+    monkeypatch.setattr("sys.argv", ["main.py", "--active"])
+
+    main.main()
+
+    assert timing.click_pauses_enabled() is False
+
+
+def test_run_with_only_visible_mode_keeps_click_pauses(monkeypatch, etapas):
+    monkeypatch.setattr("sys.argv", ["main.py", "--ver"])
+
+    main.main()
+
+    assert timing.click_pauses_enabled() is True

@@ -35,6 +35,11 @@ def sem_pausa_real_entre_acessos(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def click_pauses_restored(monkeypatch):
+    monkeypatch.setattr("extrator.timing._click_pauses_enabled", True)
+
+
+@pytest.fixture(autouse=True)
 def night_access_allowed_in_tests(monkeypatch):
     """Mantém as rodadas de teste fora da trava da madrugada, salvo quando o teste a exercita."""
     monkeypatch.setattr("main.night_access_allowed", lambda moment=None: True)

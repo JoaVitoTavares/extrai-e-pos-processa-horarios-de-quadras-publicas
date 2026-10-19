@@ -15,7 +15,7 @@ from extrator.config import (
 from extrator.courts_collector import proxy_launch_settings
 from extrator.debug import debug
 from extrator.persistencia import registrar_verificacao, slug
-from extrator.timing import wait_between_accesses
+from extrator.timing import disable_click_pauses, wait_between_accesses
 from extrator.access_windows import (
     current_peak_window,
     local_now,
@@ -45,6 +45,9 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--ver", action="store_true", help="abre o navegador em vez de rodar headless"
+    )
+    parser.add_argument(
+        "--active", action="store_true", help="desliga as pausas aleatórias entre cliques"
     )
     parser.add_argument(
         "--de", type=int, default=0, metavar="N",
@@ -94,6 +97,8 @@ def main() -> None:
         print("pausado por captcha: extrações adiadas até o fim da trava de 2 horas.")
         return
     visible_browser = arguments.ver
+    if arguments.active:
+        disable_click_pauses()
     days_from, days_ahead = arguments.de, arguments.ate
     if days_from >= 1 and current_peak_window() is None:
         print("fora da janela de pico; extração do dia seguinte adiada.")

@@ -148,3 +148,30 @@ def test_human_click_waits_before_clicking(monkeypatch):
     courts_collector.click_with_pause(Target(), timeout=1000)
 
     assert order == ["wait", ("click", {"timeout": 1000})]
+
+
+def test_disabled_click_pauses_do_not_sleep(monkeypatch):
+    observed = []
+    monkeypatch.setattr(timing.time, "sleep", observed.append)
+
+    timing.disable_click_pauses()
+    seconds = timing.wait_between_clicks()
+
+    assert seconds == 0.0
+    assert observed == []
+
+
+def test_disabled_click_pauses_click_without_waiting(monkeypatch):
+    order = []
+    monkeypatch.setattr(
+        courts_collector, "wait_between_accesses", lambda: order.append("wait")
+    )
+
+    class Target:
+        def click(self, **kwargs):
+            order.append(("click", kwargs))
+
+    timing.disable_click_pauses()
+    courts_collector.click_with_pause(Target(), timeout=1000)
+
+    assert order == [("click", {"timeout": 1000})]
