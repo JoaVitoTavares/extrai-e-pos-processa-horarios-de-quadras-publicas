@@ -1,7 +1,8 @@
 .idea/
 .venv/
-.extracoes-ate-27-09-2026/
+.extracoes*
 .extrações/
 .logs/
 __pycache__/
 .env
+.dataset/
