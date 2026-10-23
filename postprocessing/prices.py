@@ -3,6 +3,7 @@
 import argparse
 import glob
 import os
+import re
 from collections import defaultdict
 from datetime import date
 
@@ -10,13 +11,23 @@ import pandas as pd
 
 from extrator.persistencia import SUFIXO_CSV
 
+SCHEDULE_IN_NAME_PATTERN = re.compile(r"(sem-horarios-cadastrados|\d{2}-\d{2}-(livre|indisponivel)).*$")
+DAY_TYPES = ["weekday"] * 5 + ["saturday", "sunday"]
 
-def _day_type(day: str) -> str | None:
+
+def clean_court_name(court_file: str) -> str:
+    return SCHEDULE_IN_NAME_PATTERN.sub("", court_file.removesuffix(SUFIXO_CSV))
+
+
+def _parse_day(day: str) -> date | None:
     try:
-        weekday = date.fromisoformat(day).weekday()
+        return date.fromisoformat(day)
     except ValueError:
         return None
-    return "weekend" if weekday >= 5 else "weekday"
+
+
+def _day_type(day: date) -> str:
+    return DAY_TYPES[day.weekday()]
 
 
 def _extraction_files(directory: str) -> list[str]:
@@ -26,6 +37,13 @@ def _extraction_files(directory: str) -> list[str]:
 def _court_key(path: str, directory: str) -> tuple[str, str]:
     arena, court_file = os.path.relpath(path, directory).split(os.sep)
     return arena, court_file
+
+
+def _nearest_prices(candidates: list[tuple[date, str]], day: date) -> set[str]:
+    if not candidates:
+        return set()
+    distance = min(abs((candidate - day).days) for candidate, _ in candidates)
+    return {price for candidate, price in candidates if abs((candidate - day).days) == distance}
 
 
 class PriceFiller:
@@ -38,12 +56,15 @@ class PriceFiller:
         report = defaultdict(lambda: {"preenchidas": 0, "vazias": 0, "divergentes": 0})
         for path in _extraction_files(self.target_dir):
             arena, court_file = _court_key(path, self.target_dir)
+            court = clean_court_name(court_file)
             df = pd.read_csv(path, dtype=str, keep_default_na=False)
             changed = False
             for index, row in df[df["valor_horario"] == ""].iterrows():
-                found = prices.get(
-                    (arena, court_file, _day_type(row["data"]), row["horario_inicio"]), set()
-                )
+                day = _parse_day(row["data"])
+                found = set()
+                if day is not None:
+                    candidates = prices.get((arena, court, _day_type(day), row["horario_inicio"]), [])
+                    found = _nearest_prices(candidates, day)
                 if len(found) == 1:
                     df.at[index, "valor_horario"] = next(iter(found))
                     report[arena]["preenchidas"] += 1
@@ -56,16 +77,17 @@ class PriceFiller:
                 df.to_csv(path, index=False)
         return dict(report)
 
-    def _source_prices(self) -> dict[tuple[str, str, str, str], set[str]]:
-        prices = defaultdict(set)
+    def _source_prices(self) -> dict[tuple[str, str, str, str], list[tuple[date, str]]]:
+        prices = defaultdict(list)
         for path in _extraction_files(self.source_dir):
             arena, court_file = _court_key(path, self.source_dir)
+            court = clean_court_name(court_file)
             df = pd.read_csv(path, dtype=str, keep_default_na=False)
-            for _, row in df[df["valor_horario"] != ""].iterrows():
-                day_type = _day_type(row["data"])
-                if day_type is not None:
-                    prices[(arena, court_file, day_type, row["horario_inicio"])].add(
-                        row["valor_horario"]
+            for _, row in df[(df["valor_horario"] != "") & (df["status"] == "Livre")].iterrows():
+                day = _parse_day(row["data"])
+                if day is not None:
+                    prices[(arena, court, _day_type(day), row["horario_inicio"])].append(
+                        (day, row["valor_horario"])
                     )
         return prices
 
