@@ -3,3 +3,4 @@ requests==2.32.3
 pandas==2.2.3
 playwright-stealth==1.0.6
 setuptools<81
+scikit-learn==1.9.1
