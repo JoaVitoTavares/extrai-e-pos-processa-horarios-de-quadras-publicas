@@ -13,12 +13,17 @@ from sklearn.model_selection import GroupKFold
 
 from postprocessing.prices import _court_key, _extraction_files
 
-NUMERIC_FEATURES = ["hora", "dia_semana", "temperatura", "umidade", "precipitacao", "velocidade_vento"]
+NUMERIC_FEATURES = ["hora", "dia_semana", "temperatura", "umidade", "precipitacao", "velocidade_vento", "valor_horario"]
 CATEGORICAL_FEATURES = ["periodo", "clima", "tipo_quadra", "quadra_coberta"]
 FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 UNAVAILABLE_PREFIX = "Indispon"
 FOLDS = 5
 OCCUPIED_THRESHOLD = 0.5
+SPORT_SEGMENTS = {
+    "futebol society": "futebol", "futebol de salão": "futebol", "grama 5": "futebol", "grama 7": "futebol",
+    "beach tennis": "areia", "futevôlei": "areia", "vôlei de praia": "areia",
+    "padel": "outros", "handebol": "outros",
+}
 
 
 def load_extraction(extraction_dir: str, excluded: set[str]) -> pd.DataFrame:
@@ -44,7 +49,7 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     hours, minutes = df["horario_inicio"].str.split(":", expand=True).astype(int).T.values
     df["hora"] = hours + minutes / 60
     df["dia_semana"] = pd.to_datetime(df["data"]).dt.dayofweek
-    for column in ["temperatura", "umidade", "precipitacao", "velocidade_vento"]:
+    for column in ["temperatura", "umidade", "precipitacao", "velocidade_vento", "valor_horario"]:
         df[column] = pd.to_numeric(df[column], errors="coerce")
     for column in CATEGORICAL_FEATURES:
         df[column] = df[column].replace("", np.nan).astype("category")
@@ -137,6 +142,8 @@ def main() -> None:
     parser.add_argument("--excluir", nargs="*", default=[], help="pastas de arena que ficam de fora")
     parser.add_argument("--teste", type=float,
                         help="fração das linhas, nos dias mais recentes, usada para validar; por exemplo 0.1")
+    parser.add_argument("--segmentos", nargs="*", choices=sorted(set(SPORT_SEGMENTS.values())),
+                        help="segmentos de esporte que entram no treino; por padrão todos")
     arguments = parser.parse_args()
     if not os.path.isdir(arguments.extracao):
         parser.error(f"diretório não encontrado: {arguments.extracao}")
@@ -147,7 +154,11 @@ def main() -> None:
     if arguments.teste is not None and not 0 < arguments.teste < 1:
         parser.error("--teste deve estar entre 0 e 1")
 
-    df = build_features(load_extraction(arguments.extracao, set(arguments.excluir)))
+    df = load_extraction(arguments.extracao, set(arguments.excluir))
+    if arguments.segmentos:
+        segment = df["esporte"].str.lower().map(SPORT_SEGMENTS)
+        df = df[segment.isin(arguments.segmentos)].reset_index(drop=True)
+    df = build_features(df)
     print(f"dados: {len(df)} linhas, {df.groupby(['arena_pasta', 'quadra_arquivo']).ngroups} quadras, "
           f"{df['arena_pasta'].nunique()} arenas, cidades: {', '.join(sorted(df['cidade'].unique()))}")
     metrics, importance = evaluate(df)
