@@ -259,6 +259,33 @@ def test_reserva_de_dias_antes_mantem_a_antecedencia_grande(tmp_path):
     assert df.loc[0, "periodo_da_reserva"] == "Noite"
 
 
+def test_horario_omitido_na_coleta_nova_conserva_a_reserva(tmp_path):
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [
+            {"hora": "20:00", "status": "Livre"},
+            {"hora": "21:00", "status": "Livre"},
+        ])],
+        str(tmp_path), AGORA,
+    )
+    persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}])],
+        str(tmp_path), datetime(2026, 8, 7, 17, 0),
+    )
+    caminho = persistencia.salvar_extracao(
+        [quadra("Areia 1 - Interna", [{"hora": "21:00", "status": "Indisponível"}])],
+        str(tmp_path), datetime(2026, 8, 7, 18, 0),
+    )[0]
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False).set_index("horario_inicio")
+
+    assert len(df) == 2
+    assert df.loc["20:00", "status"] == "Indisponível"
+    assert df.loc["20:00", "reservado_em"] == "2026-08-07T17:00:00"
+    assert df.loc["20:00", "antecedencia_horas"] == "3.00"
+    assert df.loc["20:00", "ultima_atualizacao"] == "2026-08-07T17:00:00"
+    assert df.loc["21:00", "status"] == "Indisponível"
+    assert df.loc["21:00", "reservado_em"] == "2026-08-07T18:00:00"
+
+
 def test_horario_que_ja_nasce_indisponivel_nao_inventa_reserva(tmp_path):
     caminho = persistencia.salvar_extracao(
         [quadra("Areia 1 - Interna", [{"hora": "20:00", "status": "Indisponível"}])],

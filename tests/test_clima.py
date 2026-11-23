@@ -229,6 +229,26 @@ def test_previsao_vira_uma_linha_por_hora(tmp_path):
     assert df.loc[1, "clima"] == "Céu limpo"
 
 
+def test_valor_nulo_na_hora_nao_vira_texto_nan(tmp_path):
+    com_nulo = dict(
+        HORARIA,
+        temperature_2m=[None, 17.5],
+        weather_code=[None, 0],
+        precipitation=[None, 0.0],
+    )
+    caminho = weather_collector.save_forecast(com_nulo, LATITUDE, LONGITUDE, str(tmp_path), AGORA)
+    df = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+
+    assert df.loc[0, "temperatura"] == ""
+    assert df.loc[0, "clima"] == ""
+    assert df.loc[0, "codigo_clima"] == ""
+    assert df.loc[0, "precipitacao"] == ""
+    assert df.loc[1, "codigo_clima"] not in ("", "nan", "None")
+    assert df.loc[1, "clima"] == "Céu limpo"
+    assert df.loc[1, "precipitacao"] == "0.0"
+    assert df.loc[1, "temperatura"] == "17.5"
+
+
 def test_campo_que_a_api_deixar_de_mandar_vira_coluna_vazia(tmp_path):
     sem_vento = {chave: valor for chave, valor in HORARIA.items() if chave != "wind_speed_10m"}
     caminho = weather_collector.save_forecast(sem_vento, LATITUDE, LONGITUDE, str(tmp_path), AGORA)
