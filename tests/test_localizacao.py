@@ -2,6 +2,7 @@
 
 import fnmatch
 import json
+from datetime import datetime
 
 import pytest
 import requests
@@ -179,3 +180,79 @@ def test_local_corrompido_conta_como_cache_vazio(respostas, tmp_path):
 
 def test_arquivo_do_local_nao_casa_com_o_glob_das_quadras():
     assert not fnmatch.fnmatch(localizacao.ARQUIVO_LOCAL, "*" + persistencia.SUFIXO_CSV)
+
+
+@pytest.mark.parametrize(
+    "address, esperado",
+    [
+        ({"city": "Canoas", "town": "Parobé", "county": "Canoas"}, "Canoas"),
+        ({"city": "", "town": "Parobé", "county": "Canoas"}, "Parobé"),
+        ({"village": "Morro Reuter", "municipality": "Morro Reuter", "county": "Vale do Rio dos Sinos"}, "Morro Reuter"),
+        ({"municipality": "Novo Hamburgo", "county": "Vale do Rio dos Sinos"}, "Novo Hamburgo"),
+        ({"county": "Região Metropolitana"}, "Região Metropolitana"),
+        ({}, ""),
+        (None, ""),
+    ],
+)
+def test_cidade_prefere_o_campo_mais_especifico(address, esperado):
+    assert localizacao._cidade({"address": address}) == esperado
+
+
+def test_geocodificacao_grava_a_cidade_e_nao_o_condado(respostas):
+    chamadas, get_falso = respostas
+    achado = dict(ACHADO, address={"city": "Canoas", "town": "Parobé", "county": "Canoas"})
+    get_falso.resposta = RespostaFalsa([achado])
+
+    assert localizacao.geocodificar(ENDERECO)["cidade"] == "Canoas"
+
+
+def test_coordenadas_novas_do_config_regravam_e_preservam_a_cidade(respostas, tmp_path):
+    chamadas, get_falso = respostas
+    get_falso.resposta = RespostaFalsa([ACHADO])
+    localizacao.resolver_local(ENDERECO, str(tmp_path), agora=datetime(2026, 8, 7, 8, 0))
+    local = localizacao.resolver_local(
+        ENDERECO, str(tmp_path), coordenadas=(-29.70, -50.90), agora=datetime(2026, 8, 7, 9, 0)
+    )
+    gravado = json.loads((tmp_path / localizacao.ARQUIVO_LOCAL).read_text(encoding="utf-8"))
+
+    assert len(chamadas) == 1
+    assert (local["latitude"], local["longitude"]) == (-29.70, -50.90)
+    assert local["cidade"] == "Parobé"
+    assert local["origem"] == "config"
+    assert gravado["resolvido_em"] == "2026-08-07T09:00:00"
+
+
+def test_coordenadas_iguais_do_config_nao_regravam_o_local(tmp_path):
+    localizacao.resolver_local(
+        ENDERECO, str(tmp_path), coordenadas=(-29.65, -50.81), agora=datetime(2026, 8, 7, 8, 0)
+    )
+    localizacao.resolver_local(
+        ENDERECO, str(tmp_path), coordenadas=(-29.65, -50.81), agora=datetime(2026, 8, 7, 9, 0)
+    )
+    gravado = json.loads((tmp_path / localizacao.ARQUIVO_LOCAL).read_text(encoding="utf-8"))
+
+    assert gravado["resolvido_em"] == "2026-08-07T08:00:00"
+    assert (gravado["latitude"], gravado["longitude"]) == (-29.65, -50.81)
+
+
+def test_json_que_nao_e_objeto_conta_como_cache_vazio(respostas, tmp_path):
+    chamadas, get_falso = respostas
+    get_falso.resposta = RespostaFalsa([ACHADO])
+    (tmp_path / localizacao.ARQUIVO_LOCAL).write_text("[]", encoding="utf-8")
+    local = localizacao.resolver_local(ENDERECO, str(tmp_path))
+
+    assert len(chamadas) == 1
+    assert local["cidade"] == "Parobé"
+
+
+def test_latitude_nula_conta_como_cache_vazio(respostas, tmp_path):
+    chamadas, get_falso = respostas
+    get_falso.resposta = RespostaFalsa([ACHADO])
+    (tmp_path / localizacao.ARQUIVO_LOCAL).write_text(
+        '{"endereco": "20 de Junho 54, Parobé", "latitude": null}',
+        encoding="utf-8",
+    )
+    local = localizacao.resolver_local(ENDERECO, str(tmp_path))
+
+    assert len(chamadas) == 1
+    assert local["latitude"] == -29.6509717
